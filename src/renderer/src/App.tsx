@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } fro
 import { Editor } from './components/Editor';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Layout } from './components/Layout';
-import { Sidebar } from './components/Sidebar';
 import { Toolbar } from './components/Toolbar';
 import { UpdateDialog } from './components/UpdateDialog';
 import { StatusBar } from './components/StatusBar';
@@ -26,16 +25,7 @@ import {
   type ThemeMode,
 } from './preferences';
 
-const INITIAL_SAMPLE = `; PNU PL IDE · Phase 3
-; 좌측 상단: Monaco Editor
-; 좌측 하단: Xterm.js (child_process.spawn stdout/stderr 파이핑)
-; 우측: 인터프리터 목록 / 메모리 맵 예약 공간
-;
-; 사용법:
-;   1) 상단 "열기" 로 .mk / .kob / .kpl 파일 로드
-;   2) 확장자에 따라 인터프리터가 자동 선택됨
-;   3) "실행" 클릭 — ~/.pnu-pl-ide/config.json 또는 ~/.pnu-pl-ide/bin/ 의 바이너리 사용
-`;
+const INITIAL_SAMPLE = '';
 
 function App(): JSX.Element {
   // Phase 8: persistence — 기동 시 1회 로드
@@ -58,6 +48,15 @@ function App(): JSX.Element {
     clampFontSize(initialPrefs.fontSize ?? FONT_SIZE_DEFAULT),
   );
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => initialPrefs.themeMode ?? 'system');
+  // system 모드를 해소한 실제 효과 테마. Monaco / Xterm 에 직접 전달.
+  const [themeEffective, setThemeEffective] = useState<'light' | 'dark'>(() => {
+    if (initialPrefs.themeMode === 'light') return 'light';
+    if (initialPrefs.themeMode === 'dark') return 'dark';
+    return typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: light)').matches
+      ? 'light'
+      : 'dark';
+  });
 
   // Phase 4: 업데이터 상태
   const [updateCheck, setUpdateCheck] = useState<UpdateCheckResult | null>(null);
@@ -111,6 +110,7 @@ function App(): JSX.Element {
     const root = document.documentElement;
     const apply = (effective: 'light' | 'dark'): void => {
       root.setAttribute('data-theme', effective);
+      setThemeEffective(effective);
     };
 
     if (themeMode !== 'system') {
@@ -140,7 +140,6 @@ function App(): JSX.Element {
     const t = termRef.current;
     if (!t) return;
     t.writeln('\x1b[36m[PNU PL IDE]\x1b[0m Terminal ready.');
-    t.writeln('인터프리터는 ~/.pnu-pl-ide/bin/ 또는 ~/.pnu-pl-ide/config.json 에서 해석됩니다.');
     t.writeln('');
   }, []);
 
@@ -282,16 +281,6 @@ function App(): JSX.Element {
     }
     termRef.current?.writeln('\x1b[33m[kill]\x1b[0m SIGTERM 요청');
     await window.api.interp.kill(sid);
-  }, []);
-
-  const onRevealConfig = useCallback(async () => {
-    try {
-      const res = await window.api.interp.revealConfig();
-      termRef.current?.writeln(`\x1b[90m[config]\x1b[0m ${res.path}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      termRef.current?.writeln(`\x1b[31m[config failed]\x1b[0m ${msg}`);
-    }
   }, []);
 
   // ------------------------------------------------------------------
@@ -456,18 +445,15 @@ function App(): JSX.Element {
         isDirty={isDirty}
         isRunning={isRunning}
         activeInterpreter={activeInterpreter}
-        codeFont={codeFont}
         onNew={onNew}
         onOpen={onOpen}
         onSave={() => void onSave()}
         onRun={() => void onRun()}
         onStop={() => void onStop()}
-        onRevealConfig={() => void onRevealConfig()}
         onOpenSettings={() => setSettingsOpen(true)}
         onCheckUpdates={onCheckUpdates}
         updateBadge={updateAvailableCount}
         onSelectInterpreter={setActiveInterpreter}
-        onSelectCodeFont={selectCodeFont}
       />
 
       <UpdateDialog
@@ -483,8 +469,10 @@ function App(): JSX.Element {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        codeFont={codeFont}
         fontSize={fontSize}
         themeMode={themeMode}
+        onCodeFontChange={selectCodeFont}
         onFontSizeChange={selectFontSize}
         onThemeModeChange={selectThemeMode}
       />
@@ -499,6 +487,7 @@ function App(): JSX.Element {
               path={filePath ?? undefined}
               fontFamily={fontFamily}
               fontSize={fontSize}
+              themeEffective={themeEffective}
             />
           }
           terminal={
@@ -507,12 +496,7 @@ function App(): JSX.Element {
               onInput={onTerminalInput}
               fontFamily={fontFamily}
               fontSize={Math.max(10, fontSize - 1)}
-            />
-          }
-          sidebar={
-            <Sidebar
-              activeInterpreter={activeInterpreter}
-              onSelectInterpreter={setActiveInterpreter}
+              themeEffective={themeEffective}
             />
           }
         />

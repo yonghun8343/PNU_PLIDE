@@ -134,7 +134,12 @@ export function UpdateDialog(props: UpdateDialogProps): JSX.Element | null {
 
         <div className="modal-footer">
           <small className="muted">
-            S3: {check?.s3BaseUrl || '(미설정)'}
+            {/*
+              보안/운영상 사유로 S3 base URL 은 렌더러에 노출하지 않는다.
+              - 상태만 표기: 설정됨 여부 + 최근 확인 시각.
+              - 디버그가 필요하면 main 프로세스 로그에서 확인.
+            */}
+            업데이트 서버: {check?.s3Configured ? '연결됨' : '(미설정)'}
             {check?.fetchedAt ? ` · ${new Date(check.fetchedAt).toLocaleTimeString()}` : ''}
           </small>
         </div>

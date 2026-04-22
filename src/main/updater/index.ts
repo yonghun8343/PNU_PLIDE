@@ -198,7 +198,9 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
 
   return {
     fetchedAt: now,
-    s3BaseUrl: runtime.s3BaseUrl,
+    // 렌더러에는 URL 자체를 노출하지 않는다 — boolean 플래그만 전달.
+    // s3BaseUrl 값 자체는 main 프로세스 로그에서만 확인 가능.
+    s3Configured: runtime.s3BaseUrl.length > 0,
     entries,
   };
 }

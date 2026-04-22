@@ -4,31 +4,25 @@ import {
   Play,
   StopCircle,
   FilePlus,
-  Type,
-  Settings,
   Sliders,
   Download,
 } from 'lucide-react';
 import { INTERPRETERS, type InterpreterId } from '@shared/types';
-import { CODE_FONTS, type CodeFontId } from '../fonts';
 
 interface ToolbarProps {
   currentFilePath: string | null;
   isDirty: boolean;
   isRunning: boolean;
   activeInterpreter: InterpreterId | null;
-  codeFont: CodeFontId;
   onNew: () => void;
   onOpen: () => void;
   onSave: () => void;
   onRun: () => void;
   onStop: () => void;
-  onRevealConfig?: () => void;
   onOpenSettings?: () => void;
   onCheckUpdates?: () => void;
   updateBadge?: number;
   onSelectInterpreter: (id: InterpreterId) => void;
-  onSelectCodeFont: (id: CodeFontId) => void;
 }
 
 export function Toolbar(props: ToolbarProps): JSX.Element {
@@ -37,18 +31,15 @@ export function Toolbar(props: ToolbarProps): JSX.Element {
     isDirty,
     isRunning,
     activeInterpreter,
-    codeFont,
     onNew,
     onOpen,
     onSave,
     onRun,
     onStop,
-    onRevealConfig,
     onOpenSettings,
     onCheckUpdates,
     updateBadge,
     onSelectInterpreter,
-    onSelectCodeFont,
   } = props;
 
   const displayName = currentFilePath?.split(/[\\/]/).pop() ?? '(무제)';
@@ -88,28 +79,6 @@ export function Toolbar(props: ToolbarProps): JSX.Element {
           {INTERPRETERS.map((i) => (
             <option key={i.id} value={i.id}>
               {i.displayName}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="toolbar-divider" />
-
-      <div className="toolbar-group">
-        <Type size={13} className="toolbar-icon-muted" />
-        <label className="toolbar-label" htmlFor="font-select">
-          폰트
-        </label>
-        <select
-          id="font-select"
-          className="toolbar-select"
-          value={codeFont}
-          onChange={(e) => onSelectCodeFont(e.target.value as CodeFontId)}
-          title="에디터·터미널 모노스페이스 폰트"
-        >
-          {CODE_FONTS.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.displayName}
             </option>
           ))}
         </select>
@@ -158,21 +127,10 @@ export function Toolbar(props: ToolbarProps): JSX.Element {
         <button
           className="toolbar-btn"
           onClick={onOpenSettings}
-          title="앱 설정 (폰트 크기 / 테마)"
+          title="앱 설정 (폰트 · 테마)"
         >
           <Sliders size={14} />
           <span>설정</span>
-        </button>
-      )}
-
-      {onRevealConfig && (
-        <button
-          className="toolbar-btn"
-          onClick={onRevealConfig}
-          title="~/.pnu-pl-ide/config.json 열기"
-        >
-          <Settings size={14} />
-          <span>config.json</span>
         </button>
       )}
 

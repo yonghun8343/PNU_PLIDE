@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { Terminal as XtermTerminal } from '@xterm/xterm';
+import { Terminal as XtermTerminal, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
@@ -18,6 +18,46 @@ export interface TerminalProps {
   fontFamily?: string;
   /** 터미널 폰트 크기(px). 미지정 시 12. */
   fontSize?: number;
+  /** 현재 유효 테마 (system 은 부모에서 미리 해소). 미지정 시 dark. */
+  themeEffective?: 'light' | 'dark';
+}
+
+/**
+ * Xterm 팔레트 — 다크/라이트 두 세트.
+ * - 다크는 기존 VS Code Dark+ 톤 유지.
+ * - 라이트는 VS Code Light+ 톤. ANSI 색은 배경이 밝아도 대비가 확보되도록 조정.
+ */
+const XTERM_THEME_DARK: ITheme = {
+  background: '#1e1e1e',
+  foreground: '#d4d4d4',
+  cursor: '#4fc1ff',
+  selectionBackground: '#264f78',
+};
+const XTERM_THEME_LIGHT: ITheme = {
+  background: '#ffffff',
+  foreground: '#1f1f1f',
+  cursor: '#0b6fc2',
+  selectionBackground: '#cbe4f9',
+  black: '#000000',
+  red: '#a31515',
+  green: '#007a3d',
+  yellow: '#a37100',
+  blue: '#0451a5',
+  magenta: '#af00db',
+  cyan: '#007a9a',
+  white: '#5a5a5a',
+  brightBlack: '#707070',
+  brightRed: '#c4312c',
+  brightGreen: '#098658',
+  brightYellow: '#b58900',
+  brightBlue: '#0070c1',
+  brightMagenta: '#b4009e',
+  brightCyan: '#16858d',
+  brightWhite: '#1f1f1f',
+};
+
+function xtermThemeFor(effective: 'light' | 'dark'): ITheme {
+  return effective === 'light' ? XTERM_THEME_LIGHT : XTERM_THEME_DARK;
 }
 
 /**
@@ -30,7 +70,7 @@ export interface TerminalProps {
  *   main process 로 IPC 전달하도록 교체.
  */
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Terminal(
-  { onInput, fontFamily, fontSize },
+  { onInput, fontFamily, fontSize, themeEffective },
   ref,
 ) {
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -49,12 +89,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       cursorBlink: true,
       convertEol: true,
       scrollback: 5000,
-      theme: {
-        background: '#1e1e1e',
-        foreground: '#d4d4d4',
-        cursor: '#4fc1ff',
-        selectionBackground: '#264f78',
-      },
+      theme: xtermThemeFor(themeEffective ?? 'dark'),
     });
 
     const fit = new FitAddon();
@@ -64,7 +99,50 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     term.open(hostRef.current);
     fit.fit();
 
+    /**
+     * IME (한글 2벌식 / 일본어 / 중국어 병음 등) 대응.
+     *
+     * Xterm 5.5 는 대부분의 플랫폼에서 `compositionend` 의 최종 문자열을
+     * `onData` 로 자체 emit 한다. 그러나 Electron macOS 한글 입력기나 빠른
+     * 타이핑 상황에서 간헐적으로 emit 이 누락되는 사례가 보고된다.
+     *
+     * 전략:
+     *   1) `compositionstart` ~ `compositionend` 동안은 `onData` 를 무시 (조합 중
+     *      자모/불완전 키 차단).
+     *   2) `compositionend.data` 를 수동으로 flush 하면서 타임스탬프와 함께 기록.
+     *   3) Xterm 이 같은 문자열을 곧바로 `onData` 에 재 emit 하면 dedupe 창(150ms)
+     *      내에서 1회 drop — 중복 방지.
+     *
+     * textarea 는 Xterm 이 `.xterm-helper-textarea` 로 DOM 에 심어둔다.
+     */
+    const helperTextarea = hostRef.current?.querySelector<HTMLTextAreaElement>(
+      'textarea.xterm-helper-textarea',
+    );
+    let composing = false;
+    let lastComposed = '';
+    let lastComposedAt = 0;
+
+    const onCompositionStart = (): void => {
+      composing = true;
+    };
+    const onCompositionEnd = (e: Event): void => {
+      composing = false;
+      const composed = (e as CompositionEvent).data;
+      if (!composed) return;
+      lastComposed = composed;
+      lastComposedAt = performance.now();
+      onInput?.(composed);
+    };
+    helperTextarea?.addEventListener('compositionstart', onCompositionStart);
+    helperTextarea?.addEventListener('compositionend', onCompositionEnd);
+
     const onDataDisposable = term.onData((data) => {
+      if (composing) return;
+      // Xterm 자체의 composed 재 emit 을 dedupe (150ms 창, 1회).
+      if (data === lastComposed && performance.now() - lastComposedAt < 150) {
+        lastComposed = '';
+        return;
+      }
       onInput?.(data);
     });
 
@@ -84,6 +162,8 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     return () => {
       ro.disconnect();
       onDataDisposable.dispose();
+      helperTextarea?.removeEventListener('compositionstart', onCompositionStart);
+      helperTextarea?.removeEventListener('compositionend', onCompositionEnd);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
@@ -117,6 +197,13 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       /* ignore */
     }
   }, [fontSize]);
+
+  // themeEffective 변경 — xterm.options.theme 에 직접 할당하면 리렌더가 자동 발생.
+  useEffect(() => {
+    const term = termRef.current;
+    if (!term) return;
+    term.options.theme = xtermThemeFor(themeEffective ?? 'dark');
+  }, [themeEffective]);
 
   useImperativeHandle(
     ref,

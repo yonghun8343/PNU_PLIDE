@@ -37,10 +37,26 @@ function registerLanguage(
   monaco.languages.setLanguageConfiguration(id, config);
 }
 
-export const PNU_THEME_ID = 'pnu-dark';
+export const PNU_THEME_ID_DARK = 'pnu-dark';
+export const PNU_THEME_ID_LIGHT = 'pnu-light';
 
-function defineTheme(): void {
-  monaco.editor.defineTheme(PNU_THEME_ID, {
+/**
+ * @deprecated 하위 호환용 alias. 새 코드는 `PNU_THEME_ID_DARK` 또는
+ * `themeIdFor(effective)` 를 사용하라.
+ */
+export const PNU_THEME_ID = PNU_THEME_ID_DARK;
+
+/**
+ * effective 테마(light|dark) → 등록된 Monaco 테마 ID.
+ * Editor 컴포넌트에서 `monaco.editor.setTheme()` 에 바로 전달한다.
+ */
+export function themeIdFor(effective: 'light' | 'dark'): string {
+  return effective === 'light' ? PNU_THEME_ID_LIGHT : PNU_THEME_ID_DARK;
+}
+
+function defineThemes(): void {
+  // Dark — VS Code Dark+ 기반 (기존 pnu-dark 유지)
+  monaco.editor.defineTheme(PNU_THEME_ID_DARK, {
     base: 'vs-dark',
     inherit: true,
     rules: [
@@ -61,6 +77,29 @@ function defineTheme(): void {
     ],
     colors: {},
   });
+
+  // Light — VS Code Light+ 기반. 색은 WCAG AA 대비를 기준으로 조정.
+  monaco.editor.defineTheme(PNU_THEME_ID_LIGHT, {
+    base: 'vs',
+    inherit: true,
+    rules: [
+      { token: 'comment', foreground: '008000', fontStyle: 'italic' },
+      { token: 'keyword', foreground: 'af00db', fontStyle: 'bold' },
+      { token: 'keyword.operator', foreground: 'af00db' },
+      { token: 'support.function', foreground: '795e26' },
+      { token: 'identifier', foreground: '001080' },
+      { token: 'variable', foreground: '0070c1', fontStyle: 'italic' },
+      { token: 'constant', foreground: '0451a5' },
+      { token: 'number', foreground: '098658' },
+      { token: 'number.hex', foreground: '098658' },
+      { token: 'number.line', foreground: '707070' },
+      { token: 'string', foreground: 'a31515' },
+      { token: 'string.escape', foreground: '811f3f' },
+      { token: 'operator', foreground: '000000' },
+      { token: 'delimiter.terminator', foreground: 'af00db', fontStyle: 'bold' },
+    ],
+    colors: {},
+  });
 }
 
 export function registerPnuLanguages(): void {
@@ -71,7 +110,7 @@ export function registerPnuLanguages(): void {
   registerLanguage(KOBASIC_LANGUAGE_ID, ['.kob'], kobasicTokens, kobasicLangConfig);
   registerLanguage(KPROLOG_LANGUAGE_ID, ['.kpl'], kprologTokens, kprologLangConfig);
 
-  defineTheme();
+  defineThemes();
 }
 
 export {

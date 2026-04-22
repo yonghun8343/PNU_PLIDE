@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as monaco from 'monaco-editor';
 import '../monaco-env';
-import { PNU_THEME_ID, registerPnuLanguages } from '../monaco-languages';
+import { registerPnuLanguages, themeIdFor } from '../monaco-languages';
 
 // 모듈 로드 시 1회 — 이후 HMR 재호출에도 idempotent.
 registerPnuLanguages();
@@ -15,6 +15,8 @@ export interface EditorProps {
   fontFamily?: string;
   /** 에디터 폰트 크기(px). 미지정 시 13. */
   fontSize?: number;
+  /** 현재 유효 테마 (system 은 부모에서 미리 해소). 미지정 시 dark. */
+  themeEffective?: 'light' | 'dark';
 }
 
 /**
@@ -32,6 +34,7 @@ export function Editor({
   readOnly,
   fontFamily,
   fontSize,
+  themeEffective,
 }: EditorProps): JSX.Element {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -45,7 +48,7 @@ export function Editor({
     const editor = monaco.editor.create(containerRef.current, {
       value,
       language,
-      theme: PNU_THEME_ID,
+      theme: themeIdFor(themeEffective ?? 'dark'),
       automaticLayout: true,
       fontFamily:
         fontFamily ??
@@ -110,6 +113,13 @@ export function Editor({
       lineHeight: Math.round(fontSize * 1.5),
     });
   }, [fontSize]);
+
+  // 테마 동적 변경 — monaco.editor.setTheme 은 전역이지만, 단일 에디터만 있는
+  // 현재 구조에서는 안전. 다중 에디터 도입 시 editor.updateOptions 쪽으로 옮긴다.
+  useEffect(() => {
+    if (!editorRef.current) return;
+    monaco.editor.setTheme(themeIdFor(themeEffective ?? 'dark'));
+  }, [themeEffective]);
 
   // path 는 추후 멀티 모델 전환용 예약
   void path;

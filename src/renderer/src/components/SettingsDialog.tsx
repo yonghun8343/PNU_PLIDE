@@ -6,11 +6,13 @@ import {
   clampFontSize,
   type ThemeMode,
 } from '../preferences';
+import { CODE_FONTS, type CodeFontId } from '../fonts';
 
 /**
  * 프로그램 내 설정 모달.
  *
  * 현재 다루는 항목:
+ *   - 폰트 패밀리 (D2Coding / Hack)
  *   - 폰트 크기 (슬라이더 + 숫자 입력, 실 크기 라이브 프리뷰)
  *   - 테마 모드 (light / dark / system)
  *
@@ -21,14 +23,25 @@ import {
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  codeFont: CodeFontId;
   fontSize: number;
   themeMode: ThemeMode;
+  onCodeFontChange: (id: CodeFontId) => void;
   onFontSizeChange: (n: number) => void;
   onThemeModeChange: (m: ThemeMode) => void;
 }
 
 export function SettingsDialog(props: SettingsDialogProps): JSX.Element | null {
-  const { open, onClose, fontSize, themeMode, onFontSizeChange, onThemeModeChange } = props;
+  const {
+    open,
+    onClose,
+    codeFont,
+    fontSize,
+    themeMode,
+    onCodeFontChange,
+    onFontSizeChange,
+    onThemeModeChange,
+  } = props;
 
   // 슬라이더의 로컬 state — blur/commit 시 부모에게 전달.
   const [localSize, setLocalSize] = useState(fontSize);
@@ -65,6 +78,27 @@ export function SettingsDialog(props: SettingsDialogProps): JSX.Element | null {
         </div>
 
         <div className="modal-body">
+          <section className="settings-row">
+            <div className="settings-label">폰트</div>
+            <div className="settings-control settings-radio-group">
+              {CODE_FONTS.map((f) => (
+                <label key={f.id} className="settings-radio">
+                  <input
+                    type="radio"
+                    name="code-font"
+                    value={f.id}
+                    checked={codeFont === f.id}
+                    onChange={() => onCodeFontChange(f.id)}
+                  />
+                  <span>{f.displayName}</span>
+                </label>
+              ))}
+            </div>
+            <div className="settings-hint">
+              에디터와 터미널에 공통으로 적용되는 모노스페이스 폰트.
+            </div>
+          </section>
+
           <section className="settings-row">
             <div className="settings-label">폰트 크기</div>
             <div className="settings-control">

@@ -228,8 +228,14 @@ export interface UpdateCheckEntry {
 
 export interface UpdateCheckResult {
   fetchedAt: string;
-  /** 요약 용도로 s3BaseUrl 을 그대로 노출 */
-  s3BaseUrl: string;
+  /**
+   * 업데이트 서버가 설정되어 있는지 여부(boolean).
+   *
+   * 과거 버전은 `s3BaseUrl: string` 을 그대로 노출했으나, 렌더러/DevTools 에서
+   * 내부 배포 인프라 URL 이 관찰되는 문제가 있어 boolean 플래그로 축소했다.
+   * 진단이 필요하면 main 프로세스 로그를 확인한다.
+   */
+  s3Configured: boolean;
   entries: readonly UpdateCheckEntry[];
   /** manifest fetch 자체가 전역적으로 실패했을 때의 사유 (base 미설정 등) */
   error?: string;
