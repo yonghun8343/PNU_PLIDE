@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      CSP:
+      - Monaco Editor 는 editor.worker 를 Blob URL 로 인스턴스화하므로 worker-src 'self' blob: 필수.
+      - Vite dev 서버가 HMR WebSocket 을 쓰므로 connect-src 에 ws: 허용.
+      - Monaco 는 eval 을 사용하지 않음 (기본 editor.worker 에서). 추가 언어 worker 를
+        포함하게 되면 worker-src 만으로 충분.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: http:;"
+    />
+    <title>PNU PL IDE</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

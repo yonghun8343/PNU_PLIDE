@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+.cache/
+.turbo/
+.vite/
+*.log
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
