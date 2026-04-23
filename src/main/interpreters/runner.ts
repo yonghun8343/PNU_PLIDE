@@ -14,6 +14,9 @@
  *   - pipe 모드이므로 인터프리터가 `stdout` 을 block-buffering 하면 프롬프트가 즉시 안 보일 수 있음.
  *     Python 기반(Mowkow/K-Prolog)은 PYTHONUNBUFFERED 로 완화, C++(Kobasic)는 소스 측 flush 에 의존.
  *   - Windows 에서 spawn 은 shell=false 기본. 명령에 공백이 있어도 argv 분리가 안전.
+ *   - 인코딩: stdout/stderr 를 Buffer 로 받아 createDecoder() 로 디코딩.
+ *     Windows 에서는 PyInstaller 빌드의 sys.stderr 가 PYTHONIOENCODING 을 무시하고
+ *     locale 인코딩(CP949)으로 출력하는 사례가 있어, UTF-8 우선 → CP949 fallback chain 사용.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
@@ -48,18 +51,68 @@ function safeSend<T>(wc: WebContents, channel: string, payload: T): void {
   wc.send(channel, payload);
 }
 
+/**
+ * 자식 프로세스 stdio 를 위한 stream-aware 디코더.
+ *
+ *   - 모든 OS: UTF-8 을 stream 모드로 디코딩 (chunk boundary 안전).
+ *   - Windows: UTF-8 디코딩 시 invalid byte sequence 발견 시 windows-949(CP949)
+ *     로 fallback. PyInstaller 빌드의 sys.stderr 가 PYTHONIOENCODING 을
+ *     무시하고 locale encoding 을 쓰는 케이스를 흡수.
+ *
+ * pending buffer 로 multi-byte 문자가 chunk 경계에 걸친 경우를 보존.
+ */
+function createDecoder(): (chunk: Buffer) => string {
+  const utf8 = new TextDecoder('utf-8', { fatal: true });
+  const utf8Lossy = new TextDecoder('utf-8', { fatal: false });
+  const cp949 =
+    process.platform === 'win32'
+      ? new TextDecoder('windows-949', { fatal: false })
+      : null;
+
+  let pending: Buffer = Buffer.alloc(0);
+
+  return (chunk: Buffer): string => {
+    const combined = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk;
+
+    // 1차 시도: 엄격 UTF-8 (chunk boundary 의 partial 문자 감지)
+    try {
+      const text = utf8.decode(combined, { stream: true });
+      pending = Buffer.alloc(0);
+      return text;
+    } catch {
+      // 2차 시도: Windows 에서 CP949 fallback
+      if (cp949) {
+        // CP949 는 단일 stream 으로 보지 않음 — 자식이 latin1/cp949 만 출력하는
+        // 단순 케이스를 가정. 진짜 UTF-8/CP949 가 섞여 들어올 가능성은 낮음.
+        const text = cp949.decode(combined);
+        pending = Buffer.alloc(0);
+        return text;
+      }
+      // 3차 시도: lossy UTF-8 (replacement character)
+      const text = utf8Lossy.decode(combined);
+      pending = Buffer.alloc(0);
+      return text;
+    }
+  };
+}
+
 function attachIO(session: Session): void {
   const { id, child, target } = session;
 
-  child.stdout?.setEncoding('utf-8');
-  child.stderr?.setEncoding('utf-8');
+  // setEncoding 호출하지 않음 — Buffer 로 받아 직접 디코딩 (인코딩 fallback 처리)
+  const decodeStdout = createDecoder();
+  const decodeStderr = createDecoder();
 
-  child.stdout?.on('data', (chunk: string) => {
-    const payload: StdoutChunk = { sessionId: id, data: chunk };
+  child.stdout?.on('data', (chunk: Buffer) => {
+    const data = decodeStdout(chunk);
+    if (data.length === 0) return;
+    const payload: StdoutChunk = { sessionId: id, data };
     safeSend(target, IPC.INTERP_STDOUT, payload);
   });
-  child.stderr?.on('data', (chunk: string) => {
-    const payload: StderrChunk = { sessionId: id, data: chunk };
+  child.stderr?.on('data', (chunk: Buffer) => {
+    const data = decodeStderr(chunk);
+    if (data.length === 0) return;
+    const payload: StderrChunk = { sessionId: id, data };
     safeSend(target, IPC.INTERP_STDERR, payload);
   });
 

@@ -4,7 +4,7 @@
  * 기동 시 조용히 check 해서 카운트만 표시하고, 사용자가 툴바 "업데이트" 버튼을
  * 눌렀을 때 모달로 상세 화면을 띄운다. 각 인터프리터 별로 개별 apply.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type JSX } from 'react';
 import { X, RefreshCw, Download, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   type InterpreterId,

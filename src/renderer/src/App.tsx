@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
 import { Editor } from './components/Editor';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Layout } from './components/Layout';
@@ -146,7 +146,7 @@ function App(): JSX.Element {
   useEffect(() => {
     const t = termRef.current;
     if (!t) return;
-    t.writeln('\x1b[36m[PNU PL IDE]\x1b[0m Terminal ready.');
+    t.writeln('\x1b[36m[PNU PLIDE]\x1b[0m Terminal ready.');
     t.writeln('');
   }, []);
 

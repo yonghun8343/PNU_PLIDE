@@ -42,7 +42,7 @@ function createWindow(): BrowserWindow {
     show: false,
     // 메뉴바(파일/편집/실행/...)를 항상 노출 — 단축키 F5, CmdOrCtrl+N 가시성 확보.
     autoHideMenuBar: false,
-    title: 'PL IDE',
+    title: 'PLIDE',
     backgroundColor: initialBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -240,9 +240,9 @@ function registerIpcHandlers(): void {
   });
 }
 
-// macOS 앱 메뉴 첫 submenu 라벨을 "PL IDE" 로 표시하기 위해 whenReady 전에 호출.
-// productName (package.json) 이 이미 "PL IDE" 이지만, 개발 모드에서는 electron 기본값이 섞일 수 있어 명시적으로 설정한다.
-app.setName('PL IDE');
+// macOS 앱 메뉴 첫 submenu 라벨을 "PLIDE" 로 표시하기 위해 whenReady 전에 호출.
+// productName (package.json) 이 이미 "PLIDE" 이지만, 개발 모드에서는 electron 기본값이 섞일 수 있어 명시적으로 설정한다.
+app.setName('PLIDE');
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('edu.pusan.pl.ide');

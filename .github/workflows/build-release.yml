@@ -1,0 +1,233 @@
+name: Build & Release PLIDE
+
+# ============================================================================
+# 트리거: `release` 브랜치에 푸시되는 모든 커밋.
+#
+#   - 태그 기반이 아니라 브랜치 기반이므로, 일반적인 워크플로우는:
+#       1) main 에서 개발 → 머지
+#       2) `package.json` 의 version 을 bump
+#       3) release 브랜치에 squash/merge 또는 fast-forward
+#       4) 이 workflow 가 자동 기동 → GitHub Releases 에 업로드
+#
+#   - 수동 기동도 허용 (workflow_dispatch) — 긴급 재빌드 용도.
+#
+#   - 동일 tag (= package.json version) 으로 재푸시하면 softprops/action-gh-release
+#     가 기존 릴리즈의 파일을 갈아끼운다. 버전 충돌 방지는 운영자가 version bump 로 담당.
+#
+#   - 본 저장소는 `app/` 이 git 레포 root 이다 (`.git/` 이 app/ 안에 존재).
+#     따라서 모든 경로는 레포 root 기준으로 작성되며, 워크플로우 파일도
+#     `app/.github/workflows/` 가 아니라 (레포 관점에서) `.github/workflows/` 에 위치한다.
+# ============================================================================
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+env:
+  # 구형 JS action 들이 Node 16/18 로 고정돼 있을 때를 대비한 강제 Node 24 플래그.
+  # interpreter 저장소의 workflow 와 동일 환경을 맞춘다.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # electron-builder 가 로컬 keychain / 환경 변수에서 서명 인증서를 자동 탐지해
+  # 예기치 못한 codesign 을 걸지 않도록 차단 (무서명 정책 고수).
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+jobs:
+  # ==========================================================================
+  # 1단계 — 플랫폼별 빌드
+  # ==========================================================================
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-15-intel, macos-latest]
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      # --------------------------------------------------------------------
+      # 플랫폼별 electron-builder 실행.
+      #   - macos-latest     → ARM64 (Apple Silicon)
+      #   - macos-15-intel   → x64   (Intel Mac)
+      #   - windows-latest   → x64
+      #   - ubuntu-latest    → x64  (tar.gz)
+      #
+      # `--publish=never` 는 yml 의 `publish: null` 과 중복이지만 방어적 명시.
+      # --------------------------------------------------------------------
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          pnpm run build
+          pnpm exec electron-builder --linux --publish=never
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          pnpm run build
+          pnpm exec electron-builder --win --publish=never
+
+      - name: Build (macOS arm64)
+        if: matrix.os == 'macos-latest'
+        run: |
+          pnpm run build
+          pnpm exec electron-builder --mac --arm64 --publish=never
+
+      - name: Build (macOS x64)
+        if: matrix.os == 'macos-15-intel'
+        run: |
+          pnpm run build
+          pnpm exec electron-builder --mac --x64 --publish=never
+
+      # --------------------------------------------------------------------
+      # 산출물 SHA-256 기록.
+      # release 단계에서 runner 별 SHA256SUMS.txt 를 병합해 최종본을 만든다.
+      # --------------------------------------------------------------------
+      - name: Generate checksums
+        run: node scripts/checksum-dist.mjs
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pl-ide-${{ matrix.os }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            dist/*.dmg
+            dist/*.exe
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+
+  # ==========================================================================
+  # 2단계 — GitHub Releases 게시
+  # ==========================================================================
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    # softprops/action-gh-release 가 Release 생성/수정을 하려면 contents: write 필요.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Detected version: ${VERSION}"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      # --------------------------------------------------------------------
+      # 아티팩트 구조 정리:
+      #   artifacts/
+      #     pl-ide-ubuntu-latest/*.tar.gz            SHA256SUMS.txt
+      #     pl-ide-windows-latest/*.exe              SHA256SUMS.txt
+      #     pl-ide-macos-latest/*.dmg                SHA256SUMS.txt
+      #     pl-ide-macos-15-intel/*.dmg              SHA256SUMS.txt
+      #
+      # → 모든 설치 파일을 release/ 로 옮기고, SHA256SUMS 를 한 파일로 병합.
+      # --------------------------------------------------------------------
+      - name: Consolidate artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          find artifacts -type f \
+            \( -name '*.dmg' -o -name '*.exe' -o -name '*.tar.gz' \) \
+            -exec cp {} release/ \;
+
+          # 각 runner 가 생성한 SHA256SUMS.txt 를 하나로 병합 (중복 제거).
+          find artifacts -name 'SHA256SUMS.txt' -exec cat {} \; \
+            | sort -u > release/SHA256SUMS.txt
+
+          echo "--- 최종 릴리즈 파일 ---"
+          ls -lh release/
+          echo "--- SHA256SUMS.txt ---"
+          cat release/SHA256SUMS.txt
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: PLIDE ${{ steps.version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## PNU PLIDE ${{ steps.version.outputs.tag }}
+
+            Mowkow / Kobasic / K-Prolog 교육용 통합 IDE.
+
+            ### 설치 파일
+
+            | 플랫폼 | 파일 | 비고 |
+            |---|---|---|
+            | macOS (Apple Silicon) | `*-arm64.dmg` | M1/M2/M3 계열 |
+            | macOS (Intel) | `*-x64.dmg` | Intel Mac |
+            | Windows x64 | `*-setup-x64.exe` | NSIS 인스톨러 |
+            | Linux x64 | `*.tar.gz` | 압축 해제 후 실행 |
+
+            ### 무결성 검증
+
+            `SHA256SUMS.txt` 에 기록된 해시로 대조:
+
+            ```sh
+            # macOS / Linux
+            shasum -a 256 -c SHA256SUMS.txt
+
+            # Windows (PowerShell)
+            Get-FileHash .\<파일명> -Algorithm SHA256
+            ```
+
+            ### 첫 실행 안내
+
+            본 빌드는 교육용 **무서명 배포** 이다.
+
+            **macOS** — "악성 코드가 없음을 확인할 수 없습니다" 경고가 뜨면, **반드시 다음 명령으로 quarantine 속성을 제거** 한 후 실행:
+
+            ```sh
+            sudo xattr -dr com.apple.quarantine /Applications/PLIDE.app
+            ```
+
+            (Finder 우클릭 → 열기로는 우회되지 않는다. macOS 14+ 부터 강제됨.)
+
+            **Windows** — SmartScreen 경고 → "추가 정보" → "실행" 클릭. 한 번만 허용하면 됨.
+          files: |
+            release/*.dmg
+            release/*.exe
+            release/*.tar.gz
+            release/SHA256SUMS.txt

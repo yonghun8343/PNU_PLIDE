@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  macOS entitlements for PNU PL IDE.
+  macOS entitlements for PNU PLIDE.
 
   현재(무서명 + hardenedRuntime: false) 에서는 이 파일이 실질적인 효과를 내지
   않는다. 향후 Apple Developer ID 로 서명/공증을 도입하고 hardenedRuntime 을

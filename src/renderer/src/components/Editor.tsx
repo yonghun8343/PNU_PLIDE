@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type JSX } from 'react';
 import * as monaco from 'monaco-editor';
 import '../monaco-env';
 import { registerPnuLanguages, themeIdFor } from '../monaco-languages';

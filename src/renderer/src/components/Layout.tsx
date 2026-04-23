@@ -1,5 +1,5 @@
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import type { ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 
 interface LayoutProps {
   editor: ReactNode;
