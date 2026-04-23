@@ -64,7 +64,7 @@ pnpm build            # out/ 로 번들
 pnpm build:unpack     # 패키징 없이 dist/ 에 풀린 상태로 산출 (디버그용)
 pnpm build:mac        # macOS dmg
 pnpm build:win        # Windows nsis
-pnpm build:linux      # Linux AppImage
+pnpm build:linux      # Linux tar.gz
 ```
 
 ## 다음 단계 (Phase 2 이후)

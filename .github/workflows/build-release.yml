@@ -75,7 +75,7 @@ jobs:
       #   - macos-latest     → ARM64 (Apple Silicon)
       #   - macos-15-intel   → x64   (Intel Mac)
       #   - windows-latest   → x64
-      #   - ubuntu-latest    → x64  (AppImage + tar.gz)
+      #   - ubuntu-latest    → x64  (tar.gz)
       #
       # `--publish=never` 는 yml 의 `publish: null` 과 중복이지만 방어적 명시.
       # --------------------------------------------------------------------
@@ -118,9 +118,7 @@ jobs:
           retention-days: 7
           path: |
             dist/*.dmg
-            dist/*.zip
             dist/*.exe
-            dist/*.AppImage
             dist/*.tar.gz
             dist/SHA256SUMS.txt
 
@@ -156,10 +154,10 @@ jobs:
       # --------------------------------------------------------------------
       # 아티팩트 구조 정리:
       #   artifacts/
-      #     pl-ide-ubuntu-latest/*.AppImage  *.tar.gz  SHA256SUMS.txt
+      #     pl-ide-ubuntu-latest/*.tar.gz            SHA256SUMS.txt
       #     pl-ide-windows-latest/*.exe              SHA256SUMS.txt
-      #     pl-ide-macos-latest/*.dmg  *.zip         SHA256SUMS.txt
-      #     pl-ide-macos-15-intel/*.dmg  *.zip       SHA256SUMS.txt
+      #     pl-ide-macos-latest/*.dmg                SHA256SUMS.txt
+      #     pl-ide-macos-15-intel/*.dmg              SHA256SUMS.txt
       #
       # → 모든 설치 파일을 release/ 로 옮기고, SHA256SUMS 를 한 파일로 병합.
       # --------------------------------------------------------------------
@@ -168,8 +166,7 @@ jobs:
           set -euo pipefail
           mkdir -p release
           find artifacts -type f \
-            \( -name '*.dmg' -o -name '*.zip' -o -name '*.exe' \
-               -o -name '*.AppImage' -o -name '*.tar.gz' \) \
+            \( -name '*.dmg' -o -name '*.exe' -o -name '*.tar.gz' \) \
             -exec cp {} release/ \;
 
           # 각 runner 가 생성한 SHA256SUMS.txt 를 하나로 병합 (중복 제거).
@@ -199,10 +196,10 @@ jobs:
 
             | 플랫폼 | 파일 | 비고 |
             |---|---|---|
-            | macOS (Apple Silicon) | `*-arm64.dmg` / `*-arm64.zip` | M1/M2/M3 계열 |
-            | macOS (Intel) | `*-x64.dmg` / `*-x64.zip` | Intel Mac |
-            | Windows x64 | `*-setup-x64.exe` / `*-portable-x64.exe` | NSIS 인스톨러 / 포터블 |
-            | Linux x64 | `*.AppImage` / `*.tar.gz` | AppImage 권장 |
+            | macOS (Apple Silicon) | `*-arm64.dmg` | M1/M2/M3 계열 |
+            | macOS (Intel) | `*-x64.dmg` | Intel Mac |
+            | Windows x64 | `*-setup-x64.exe` | NSIS 인스톨러 |
+            | Linux x64 | `*.tar.gz` | 압축 해제 후 실행 |
 
             ### 무결성 검증
 
@@ -223,8 +220,6 @@ jobs:
             - **Windows**: SmartScreen 경고 → "추가 정보" → "실행"
           files: |
             release/*.dmg
-            release/*.zip
             release/*.exe
-            release/*.AppImage
             release/*.tar.gz
             release/SHA256SUMS.txt

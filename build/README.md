@@ -11,7 +11,7 @@ electron-builder 는 파일명 기반으로 플랫폼별 아이콘을 자동 선
 |---|---|---|---|
 | `icon.icns` | macOS | 1024×1024 (다중 해상도 포함) | `iconutil` 또는 `makeicns` 로 생성 |
 | `icon.ico` | Windows | 256×256 (다중 해상도 포함) | `png2ico` / ImageMagick 으로 생성 |
-| `icon.png` | Linux | 512×512 이상 (정사각) | AppImage / tar.gz 에 embed |
+| `icon.png` | Linux | 512×512 이상 (정사각) | tar.gz 번들에 embed |
 | `background.png` | macOS DMG | 540×380 | 생략 시 기본 DMG 레이아웃 |
 
 ## 추가 파일
