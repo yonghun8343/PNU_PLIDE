@@ -216,8 +216,16 @@ jobs:
             ### 첫 실행 안내
 
             본 빌드는 교육용 **무서명 배포** 이다.
-            - **macOS**: Finder 에서 우클릭 → 열기 (한 번만), 또는 `xattr -dr com.apple.quarantine "/Applications/PLIDE.app"`
-            - **Windows**: SmartScreen 경고 → "추가 정보" → "실행"
+
+            **macOS** — "악성 코드가 없음을 확인할 수 없습니다" 경고가 뜨면, **반드시 다음 명령으로 quarantine 속성을 제거** 한 후 실행:
+
+            ```sh
+            sudo xattr -dr com.apple.quarantine /Applications/PLIDE.app
+            ```
+
+            (Finder 우클릭 → 열기로는 우회되지 않는다. macOS 14+ 부터 강제됨.)
+
+            **Windows** — SmartScreen 경고 → "추가 정보" → "실행" 클릭. 한 번만 허용하면 됨.
           files: |
             release/*.dmg
             release/*.exe

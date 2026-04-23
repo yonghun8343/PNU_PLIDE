@@ -53,15 +53,18 @@ asarUnpack:
 #  SmartScreen 은 무서명 실행 파일에 대해 "알 수 없는 게시자" 표기.
 # ----------------------------------------------------------------------------
 win:
-  executableName: pnu-pl-ide
+  executableName: PLIDE
   artifactName: ${name}-${version}-${arch}.${ext}
-  target:
-    - target: nsis
-      arch:
-        - x64
-  # 무서명 명시 — electron-builder 가 로컬 환경의 인증서를 자동 감지하지 않도록 빈 값.
-  signAndEditExecutable: false
+  icon: build/icon.ico
+  # rcedit 를 통한 .exe 리소스 수정은 활성화 (true 가 default).
+  #   - 아이콘: build/icon.ico → 실행파일 내장
+  #   - VersionInfo.ProductName / FileDescription: package.json 의 productName 사용
+  #   - 작업관리자에 'PLIDE' 로 표시 (이전: 'Electron')
+  # 서명은 인증서 환경변수(CSC_LINK 등)가 없으면 자동 skip — 무서명 정책 유지.
   verifyUpdateCodeSignature: false
+  # rcedit 가 박는 메타데이터 라벨. 명시하지 않으면 author 필드에서 추출.
+  publisherName: PNU PL Lab
+  legalTrademarks: PLIDE
 
 nsis:
   artifactName: ${name}-${version}-setup-${arch}.${ext}
@@ -74,6 +77,18 @@ nsis:
   allowElevation: true
   allowToChangeInstallationDirectory: true
   deleteAppDataOnUninstall: false  # 사용자 코드가 ~/.pnu-pl-ide 에 남아도 보존
+  # ----------------------------------------------------------------------
+  # Custom NSIS hooks — 레거시 executable/바로가기 정리.
+  #
+  #   `executableName: pnu-pl-ide` → `PLIDE` 로 변경되면서, 이전 버전이
+  #   설치된 환경에서는 INSTDIR 에 `pnu-pl-ide.exe` 가 그대로 남는다.
+  #   appId 는 동일하므로 NSIS 가 같은 INSTDIR 를 재사용하지만, 구 .exe 는
+  #   덮어쓰기 대상이 아니어서 작업관리자/시작메뉴에 두 항목이 공존하게 됨.
+  #
+  #   build/installer.nsh 의 customInstall / customUnInstall 매크로가 구 파일
+  #   목록을 명시적으로 Delete 한다 (없으면 Delete 는 silent no-op).
+  # ----------------------------------------------------------------------
+  include: build/installer.nsh
 
 # ----------------------------------------------------------------------------
 # macOS — DMG 전용
@@ -96,11 +111,11 @@ nsis:
 mac:
   category: public.app-category.developer-tools
   artifactName: ${name}-${version}-${arch}.${ext}
+  icon: build/icon.icns
+  # arch 는 CLI(`--x64` 또는 `--arm64`) 로 결정. yml 에 둘 다 적으면
+  # electron-builder 25.x 가 CLI 플래그를 필터로 인식 못 해 양쪽이 모두 빌드됨.
   target:
     - target: dmg
-      arch:
-        - x64
-        - arm64
   identity: null
   hardenedRuntime: false
   gatekeeperAssess: false
