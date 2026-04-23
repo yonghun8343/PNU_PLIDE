@@ -21,6 +21,19 @@ appId: edu.pusan.pl.ide
 productName: PLIDE
 copyright: © 2026 Pusan National University Programming Languages Lab
 
+# ----------------------------------------------------------------------------
+# 빌드 시점 package.json override.
+#
+# package.json 의 `description` 은 GitHub/npm 카탈로그용으로 한 줄 설명을
+#유지하지만, Windows .exe 의 VersionInfo.FileDescription 으로 그대로 박히면
+# 작업표시줄 호버 툴팁/작업관리자 표시명에 80자가 통째로 노출되어 부적절.
+#
+# 여기서 빌드 사본의 description 만 짧게 override 한다 — 원본 package.json 은
+# 손대지 않는다 (소스 / 검색 메타데이터는 긴 버전 유지).
+# ----------------------------------------------------------------------------
+extraMetadata:
+  description: PLIDE
+
 directories:
   buildResources: build
   output: dist
