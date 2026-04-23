@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { INTERPRETERS, type InterpreterId } from '@shared/types';
 
 interface SidebarProps {

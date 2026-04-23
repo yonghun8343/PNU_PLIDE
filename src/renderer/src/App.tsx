@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type JSX } from 'react';
 import { Editor } from './components/Editor';
 import { Terminal, type TerminalHandle } from './components/Terminal';
 import { Layout } from './components/Layout';

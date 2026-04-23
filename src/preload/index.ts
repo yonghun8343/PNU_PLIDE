@@ -121,11 +121,11 @@ if (process.contextIsolated) {
     console.error('contextBridge expose 실패:', err);
   }
 } else {
-  // sandbox=false + contextIsolation=false 인 경우에만 도달 (디버그용)
-  // @ts-expect-error renderer global augmentation
-  window.electron = electronAPI;
-  // @ts-expect-error renderer global augmentation
-  window.api = api;
+  // sandbox=false + contextIsolation=false 인 경우에만 도달 (디버그용).
+  // window 에 직접 주입 — 타입 단언은 unknown 경유로 안전하게 처리.
+  const w = window as unknown as { electron: typeof electronAPI; api: typeof api };
+  w.electron = electronAPI;
+  w.api = api;
 }
 
 export type PreloadApi = typeof api;
