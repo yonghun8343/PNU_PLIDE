@@ -1,8 +1,8 @@
 {
   "name": "pnu-pl-ide",
-  "productName": "PL IDE",
+  "productName": "PLIDE",
   "version": "0.0.1",
-  "description": "PNU PL IDE — Mowkow / Kobasic / K-Prolog 통합 교육용 IDE",
+  "description": "PNU PLIDE — Mowkow / Kobasic / K-Prolog 통합 교육용 IDE",
   "main": "./out/main/index.js",
   "author": {
     "name": "PNU PL Lab",

@@ -1,11 +1,11 @@
-name: Build & Release PL IDE
+name: Build & Release PLIDE
 
 # ============================================================================
 # 트리거: `release` 브랜치에 푸시되는 모든 커밋.
 #
 #   - 태그 기반이 아니라 브랜치 기반이므로, 일반적인 워크플로우는:
 #       1) main 에서 개발 → 머지
-#       2) `app/package.json` 의 version 을 bump
+#       2) `package.json` 의 version 을 bump
 #       3) release 브랜치에 squash/merge 또는 fast-forward
 #       4) 이 workflow 가 자동 기동 → GitHub Releases 에 업로드
 #
@@ -13,6 +13,10 @@ name: Build & Release PL IDE
 #
 #   - 동일 tag (= package.json version) 으로 재푸시하면 softprops/action-gh-release
 #     가 기존 릴리즈의 파일을 갈아끼운다. 버전 충돌 방지는 운영자가 version bump 로 담당.
+#
+#   - 본 저장소는 `app/` 이 git 레포 root 이다 (`.git/` 이 app/ 안에 존재).
+#     따라서 모든 경로는 레포 root 기준으로 작성되며, 워크플로우 파일도
+#     `app/.github/workflows/` 가 아니라 (레포 관점에서) `.github/workflows/` 에 위치한다.
 # ============================================================================
 
 on:
@@ -21,8 +25,12 @@ on:
   workflow_dispatch:
 
 env:
+  # 구형 JS action 들이 Node 16/18 로 고정돼 있을 때를 대비한 강제 Node 24 플래그.
+  # interpreter 저장소의 workflow 와 동일 환경을 맞춘다.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  # electron-builder 가 로컬 keychain / 환경 변수에서 서명 인증서를 자동 탐지해
+  # 예기치 못한 codesign 을 걸지 않도록 차단 (무서명 정책 고수).
+  CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
 jobs:
   # ==========================================================================
@@ -38,8 +46,6 @@ jobs:
 
     defaults:
       run:
-        # 모든 step 은 app/ 기준으로 실행.
-        working-directory: app
         shell: bash
 
     steps:
@@ -49,14 +55,14 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: latest
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: '20'
           cache: pnpm
-          cache-dependency-path: app/pnpm-lock.yaml
+          cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -111,12 +117,12 @@ jobs:
           if-no-files-found: error
           retention-days: 7
           path: |
-            app/dist/*.dmg
-            app/dist/*.zip
-            app/dist/*.exe
-            app/dist/*.AppImage
-            app/dist/*.tar.gz
-            app/dist/SHA256SUMS.txt
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.AppImage
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
 
   # ==========================================================================
   # 2단계 — GitHub Releases 게시
@@ -137,7 +143,7 @@ jobs:
       - name: Read version from package.json
         id: version
         run: |
-          VERSION=$(node -p "require('./app/package.json').version")
+          VERSION=$(node -p "require('./package.json').version")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Detected version: ${VERSION}"
@@ -179,13 +185,13 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
-          name: PL IDE ${{ steps.version.outputs.tag }}
+          name: PLIDE ${{ steps.version.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
           fail_on_unmatched_files: true
           body: |
-            ## PNU PL IDE ${{ steps.version.outputs.tag }}
+            ## PNU PLIDE ${{ steps.version.outputs.tag }}
 
             Mowkow / Kobasic / K-Prolog 교육용 통합 IDE.
 
@@ -213,10 +219,8 @@ jobs:
             ### 첫 실행 안내
 
             본 빌드는 교육용 **무서명 배포** 이다.
-            - **macOS**: Finder 에서 우클릭 → 열기 (한 번만), 또는 `xattr -dr com.apple.quarantine "/Applications/PL IDE.app"`
+            - **macOS**: Finder 에서 우클릭 → 열기 (한 번만), 또는 `xattr -dr com.apple.quarantine "/Applications/PLIDE.app"`
             - **Windows**: SmartScreen 경고 → "추가 정보" → "실행"
-
-            자세한 배포/운영 정책은 저장소의 `docs/phase7-build.md` 참고.
           files: |
             release/*.dmg
             release/*.zip

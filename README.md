@@ -1,4 +1,4 @@
-# PNU PL IDE
+# PNU PLIDE
 
 부산대 PL 연구실 교육용 언어 3종(Mowkow / Kobasic / K-Prolog) 통합 IDE.
 
@@ -48,7 +48,7 @@ pnpm dev              # Vite dev server + Electron main watch
 
 정상 기동 시 1280×800 창이 뜨고 다음이 확인되어야 한다:
 
-- 상단 헤더에 "PNU PL IDE · Phase 1 · Electron Shell"
+- 상단 헤더에 "PNU PLIDE · Phase 1 · Electron Shell"
 - 좌상단 Editor placeholder (Mowkow 코드 예시)
 - 좌하단 Terminal placeholder
 - 우측 사이드바에 3개 인터프리터 메타데이터(파일 확장자·PTY 필요 여부·REPL 종료 방법)
