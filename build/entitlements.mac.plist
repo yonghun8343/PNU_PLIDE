@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS entitlements for PNU PL IDE.
+
+  현재(무서명 + hardenedRuntime: false) 에서는 이 파일이 실질적인 효과를 내지
+  않는다. 향후 Apple Developer ID 로 서명/공증을 도입하고 hardenedRuntime 을
+  켤 때 아래 권한들이 필요해진다.
+
+  포함 권한의 의도:
+    - allow-jit:                      Monaco Editor / V8 의 JIT 코드 생성.
+    - allow-unsigned-executable-memory:
+                                      JIT/eval 계열이 allocate 하는 메모리
+                                      페이지를 실행 가능으로 표기.
+    - disable-library-validation:
+                                      ~/.pnu-pl-ide/bin/ 의 unsigned 인터프리터
+                                      바이너리를 child_process.spawn 으로 실행.
+    - allow-dyld-environment-variables:
+                                      인터프리터 실행 시 PYTHONIOENCODING 등
+                                      환경 변수 조작 필요.
+    - inherit:                        child 프로세스가 부모 entitlements 상속.
+-->
+<plist version="1.0">
+  <dict>
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+    <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+    <true/>
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <true/>
+    <key>com.apple.security.inherit</key>
+    <true/>
+  </dict>
+</plist>

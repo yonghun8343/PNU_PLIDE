@@ -46,6 +46,12 @@ export const IPC = {
 
   // System metrics (main → renderer push, 1Hz)
   SYS_METRICS: 'sys:metrics',
+
+  // UX-5 — 테마 모드 동기화 (renderer → main, send).
+  //   - renderer 가 결정한 effective 테마(light|dark) 를 main 으로 통지.
+  //   - main 은 `nativeTheme.themeSource` 과 `BrowserWindow.setBackgroundColor` 를
+  //     이에 맞춰 갱신하여 macOS 신호등/Windows caption 영역의 색 누락을 막는다.
+  THEME_SET: 'theme:set',
 } as const;
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC];

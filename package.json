@@ -23,7 +23,11 @@
     "build:unpack": "pnpm run build && electron-builder --dir",
     "build:win": "pnpm run build && electron-builder --win",
     "build:mac": "pnpm run build && electron-builder --mac",
-    "build:linux": "pnpm run build && electron-builder --linux"
+    "build:linux": "pnpm run build && electron-builder --linux",
+    "build:all": "pnpm run build && electron-builder --win --mac --linux --publish=never",
+    "dist:clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dist:checksum": "node scripts/checksum-dist.mjs",
+    "release:local": "pnpm run dist:clean && pnpm run build:all && pnpm run dist:checksum"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -31,7 +35,6 @@
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
     "@xterm/xterm": "^5.5.0",
-    "electron-updater": "^6.3.9",
     "lucide-react": "^0.469.0",
     "monaco-editor": "^0.52.2",
     "react-resizable-panels": "^2.1.7",

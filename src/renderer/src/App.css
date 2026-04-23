@@ -10,6 +10,8 @@
   --accent-soft: #0e639c;
   --danger: #e06c75;
   --border: #333;
+  /* xterm 캔버스 바깥 padding 색상 — Terminal.tsx 의 XTERM_THEME_*와 일치해야 이음매가 안 보임. */
+  --term-bg: #1e1e1e;
   font-family:
     ui-sans-serif, system-ui, -apple-system, 'Segoe UI', 'Apple SD Gothic Neo', 'Noto Sans KR',
     sans-serif;
@@ -29,6 +31,7 @@ html[data-theme='light'] {
   --accent-soft: #c8e0f0;
   --danger: #c4312c;
   --border: #cfcfcf;
+  --term-bg: #ffffff;
   color-scheme: light;
 }
 html[data-theme='dark'] {
@@ -199,7 +202,8 @@ body,
   width: 100%;
   height: 100%;
   padding: 4px 8px;
-  background: #1e1e1e;
+  /* xterm 캔버스와 패딩 영역 색이 달라지지 않도록 --term-bg 를 따라간다. */
+  background: var(--term-bg);
 }
 .xterm-host .xterm {
   height: 100%;

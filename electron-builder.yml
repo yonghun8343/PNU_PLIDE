@@ -1,8 +1,30 @@
+# ============================================================================
+# PNU PL IDE — electron-builder 배포 설정
+# ============================================================================
+#
+# 정책:
+#   - 교육용이므로 Apple/Microsoft 코드 서명 및 공증(notarization) 없이 배포.
+#   - IDE Shell 자체는 auto-update 를 하지 않음 (publish: null).
+#     Interpreter 업데이트만 앱 내부 custom updater 가 S3 → ~/.pnu-pl-ide/bin/
+#     으로 hot-swap.
+#   - 첫 실행 시 macOS Gatekeeper / Windows SmartScreen 경고 발생은 운영상
+#     감수하고, docs/phase7-build.md 에서 우회 방법을 학생에게 안내.
+#
+# 향후 서명 도입 시 수정해야 할 곳:
+#   - mac.identity:         Apple Developer ID Application 인증서 이름
+#   - mac.notarize:         teamId (Developer Account)
+#   - win.certificateFile / win.certificatePassword 또는 sign 스크립트
+#   - publish: (electron-updater 복구 시) 실제 배포 서버 정보
+# ============================================================================
+
 appId: edu.pusan.pl.ide
-productName: PNU PL IDE
+productName: PL IDE
+copyright: © 2026 Pusan National University Programming Languages Lab
+
 directories:
   buildResources: build
   output: dist
+
 files:
   - '!**/.vscode/*'
   - '!src/*'
@@ -10,36 +32,125 @@ files:
   - '!{.eslintrc.cjs,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+
 asar: true
 asarUnpack:
   - resources/**
+
+# ----------------------------------------------------------------------------
+# Windows — NSIS 인스톨러 + portable zip 동시 생성
+#
+#  - nsis: 일반 학생용 (바탕화면 바로가기 자동 생성)
+#  - portable: 설치 권한이 없는 강의실/실습실용 (압축 풀어 실행)
+#
+#  서명 없음: publisherName 을 빈 문자열로 두면 NSIS 가 경고를 최소화.
+#  SmartScreen 은 무서명 실행 파일에 대해 "알 수 없는 게시자" 표기.
+# ----------------------------------------------------------------------------
 win:
   executableName: pnu-pl-ide
+  artifactName: ${name}-${version}-${arch}.${ext}
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  # 무서명 명시 — electron-builder 가 로컬 환경의 인증서를 자동 감지하지 않도록 빈 값.
+  signAndEditExecutable: false
+  verifyUpdateCodeSignature: false
+
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${name}-${version}-setup-${arch}.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  createStartMenuShortcut: true
+  oneClick: false           # 사용자가 설치 경로 선택 가능 (교내 공용 PC 고려)
+  perMachine: false         # 관리자 권한 없이 현재 사용자에 설치
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false  # 사용자 코드가 ~/.pnu-pl-ide 에 남아도 보존
+
+portable:
+  artifactName: ${name}-${version}-portable-${arch}.${ext}
+
+# ----------------------------------------------------------------------------
+# macOS — DMG + ZIP
+#
+#  - identity: null      → ad-hoc 서명조차 하지 않음 (완전 무서명)
+#  - hardenedRuntime: false → entitlements 무효화. child_process.spawn 제한 없음.
+#  - notarize: false     → Apple 공증 건너뜀.
+#
+#  결과: 사용자 첫 실행 시 "열 수 없는 개발자" 경고.
+#  우회: Finder 에서 우클릭 → 열기, 또는 `xattr -d com.apple.quarantine …`
+#  (안내 문서: docs/phase7-build.md)
+# ----------------------------------------------------------------------------
 mac:
+  category: public.app-category.developer-tools
+  artifactName: ${name}-${version}-${arch}.${ext}
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip         # 업데이트 아카이브 / 수동 배포용 경량 번들
+      arch:
+        - x64
+        - arm64
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  notarize: false
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    - NSCameraUsageDescription: 필요 시 설정
-  target:
-    - dmg
+    NSHumanReadableCopyright: © 2026 PNU PL Lab
+
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
+  writeUpdateInfo: false
+  # 배경 이미지/아이콘 레이아웃 커스터마이즈는 생략 — 기본 DMG 사용.
+
+# ----------------------------------------------------------------------------
+# Linux — AppImage + tar.gz
+#
+#  AppImage 는 서명이 사실상 비필수이며 우분투/데비안 어디서든 단일 파일 실행.
+#  tar.gz 은 CLI 선호 환경 / WSL / 서버 배포 대비.
+# ----------------------------------------------------------------------------
 linux:
+  artifactName: ${name}-${version}-${arch}.${ext}
   target:
-    - AppImage
-  maintainer: pnu-pl-lab
+    - target: AppImage
+      arch:
+        - x64
+    - target: tar.gz
+      arch:
+        - x64
+  maintainer: yonghun83@pusan.ac.kr
+  vendor: PNU PL Lab
   category: Development
+  synopsis: Mowkow / Kobasic / K-Prolog 통합 교육용 IDE
+  description: |
+    부산대학교 프로그래밍 언어 연구실에서 개발한 교육용 통합 IDE.
+    Mowkow, Kobasic, K-Prolog 세 인터프리터를 한 창에서 실행한다.
+
 appImage:
   artifactName: ${name}-${version}.${ext}
-npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates
+
+# ----------------------------------------------------------------------------
+# 배포 — 자동 업데이트 채널 사용하지 않음.
+#
+#  Interpreter 는 앱 내부 updater (src/main/updater/) 가 S3 에서 받으므로,
+#  여기서의 publish 블록은 오직 "electron-builder 가 생성하는 latest.yml 류"
+#  와만 관계 있음. 사용하지 않을 것이므로 null.
+# ----------------------------------------------------------------------------
+publish: null
+
+# ----------------------------------------------------------------------------
+# 빌드 가속 — 국내 네트워크에서 Electron 바이너리 다운로드가 느릴 때의 mirror.
+# 연구실 내부에서 mirror 를 운영하면 여기를 교체.
+# ----------------------------------------------------------------------------
 electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
+
+npmRebuild: false

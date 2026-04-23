@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, shell, BrowserWindow, ipcMain, dialog, nativeTheme } from 'electron';
 import { join } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
@@ -14,6 +14,22 @@ import type { UpdateProgress } from '@shared/types';
 import { buildAppMenu } from './menu';
 import { startSysMetricsSampler, stopSysMetricsSampler } from './sys-metrics';
 
+/**
+ * 초기 BrowserWindow backgroundColor 결정.
+ *
+ * macOS 의 경우 이 값이 native titlebar (신호등 영역) 배경으로 노출되므로
+ * "현재 시스템" 이 라이트라면 흰색으로, 다크라면 어두운 색으로 시작해야
+ * 렌더러가 실제 테마를 통지하기 전까지의 짧은 시간 동안 색 튐을 방지할 수 있다.
+ *
+ * 사용자가 이전 세션에서 명시적으로 다크/라이트를 선택했는지는 renderer
+ * preferences 가 localStorage 에 저장하므로 main 에서는 확인할 수 없다.
+ * 따라서 시스템 기본값을 따르고, 렌더러 첫 tick 직후 `theme:set` IPC 로
+ * 정확한 값으로 수렴시킨다.
+ */
+function initialBackgroundColor(): string {
+  return nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ffffff';
+}
+
 function createWindow(): BrowserWindow {
   const restored = loadWindowState();
   const win = new BrowserWindow({
@@ -27,7 +43,7 @@ function createWindow(): BrowserWindow {
     // 메뉴바(파일/편집/실행/...)를 항상 노출 — 단축키 F5, CmdOrCtrl+N 가시성 확보.
     autoHideMenuBar: false,
     title: 'PL IDE',
-    backgroundColor: '#1e1e1e',
+    backgroundColor: initialBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -72,6 +88,36 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC.APP_OPEN_EXTERNAL, async (_e, url: string) => {
     await shell.openExternal(url);
   });
+
+  /**
+   * UX-5: 테마 동기화.
+   *
+   * 페이로드:
+   *   - `mode`: 사용자가 선택한 모드('light'|'dark'|'system'). `nativeTheme.themeSource` 에 그대로 전달.
+   *   - `effective`: 'system' 을 해소한 실제 테마('light'|'dark'). 창 배경색에 사용.
+   *
+   * macOS 에서 `nativeTheme.themeSource` 를 갱신하면 native 타이틀바(신호등 영역)
+   * 까지 해당 appearance 를 따른다. `setBackgroundColor` 는 타이틀바 및 리사이즈
+   * 순간의 빈 영역 색을 결정하므로 두 가지를 함께 업데이트해야 색 튐이 사라진다.
+   */
+  ipcMain.on(
+    IPC.THEME_SET,
+    (
+      e,
+      payload: { mode: 'light' | 'dark' | 'system'; effective: 'light' | 'dark' },
+    ) => {
+      try {
+        nativeTheme.themeSource = payload.mode;
+      } catch {
+        /* 비정상 payload 는 무시 */
+      }
+      const bg = payload.effective === 'light' ? '#ffffff' : '#1e1e1e';
+      const owner = BrowserWindow.fromWebContents(e.sender);
+      if (owner && !owner.isDestroyed()) {
+        owner.setBackgroundColor(bg);
+      }
+    },
+  );
 
   // 파일 열기 dialog
   ipcMain.handle(IPC.FS_OPEN_DIALOG, async (e) => {

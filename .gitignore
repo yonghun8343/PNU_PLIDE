@@ -10,3 +10,13 @@ out/
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# electron-builder 가 생성하는 플랫폼별 임시 언팩 디렉토리
+build/*-unpacked/
+build/mac/
+build/mac-arm64/
+
+# 무서명 빌드에서는 사용하지 않지만 혹시라도 생성될 signing 관련 파일 차단
+*.pfx
+*.p12
+*.provisionprofile

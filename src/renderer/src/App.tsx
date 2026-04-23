@@ -111,6 +111,13 @@ function App(): JSX.Element {
     const apply = (effective: 'light' | 'dark'): void => {
       root.setAttribute('data-theme', effective);
       setThemeEffective(effective);
+      // main 프로세스로 테마 통지 — nativeTheme.themeSource 및 BrowserWindow.setBackgroundColor 갱신.
+      // macOS 의 신호등 영역(native titlebar) 까지 테마를 일치시키기 위함.
+      try {
+        window.api.theme?.set({ mode: themeMode, effective });
+      } catch {
+        /* 구버전 preload 호환 — theme 브리지 미제공 시 무시 */
+      }
     };
 
     if (themeMode !== 'system') {

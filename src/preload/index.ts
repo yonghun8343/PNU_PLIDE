@@ -97,6 +97,20 @@ const api = {
   sys: {
     onMetrics: (cb: (m: SysMetrics) => void): Unsubscribe => subscribe(IPC.SYS_METRICS, cb),
   },
+
+  /**
+   * 테마 동기화 — renderer → main.
+   * `nativeTheme.themeSource` 와 `BrowserWindow.setBackgroundColor` 를
+   * main 에서 함께 갱신하여 macOS 신호등 / Windows caption 영역의 배경 튐을 막는다.
+   */
+  theme: {
+    set: (payload: {
+      mode: 'light' | 'dark' | 'system';
+      effective: 'light' | 'dark';
+    }): void => {
+      ipcRenderer.send(IPC.THEME_SET, payload);
+    },
+  },
 };
 
 if (process.contextIsolated) {
