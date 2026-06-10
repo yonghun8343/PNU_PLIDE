@@ -52,7 +52,7 @@ pnpm dev              # Vite dev server + Electron main watch
 - 좌상단 Editor placeholder (Mowkow 코드 예시)
 - 좌하단 Terminal placeholder
 - 우측 사이드바에 3개 인터프리터 메타데이터(파일 확장자·PTY 필요 여부·REPL 종료 방법)
-- 하단 푸터에 `v0.0.1 · Electron 33.x · Node 20.x · <platform>/<arch>`
+- 하단 푸터에 `v0.0.2 · Electron 33.x · Node 20.x · <platform>/<arch>`
 
 푸터가 렌더링된다는 것은 renderer → preload(contextBridge) → main(ipcMain.handle) → app.getVersion() 왕복이 성공했다는 뜻. **Phase 1 검증 핵심 포인트**.
 
