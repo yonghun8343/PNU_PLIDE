@@ -8,7 +8,6 @@
  * main process 의 상태(창 크기/위치)는 electron BrowserWindow 에서 별도로 관리하며
  * 이 모듈은 renderer-local UI 상태 전용.
  */
-import type { InterpreterId } from '@shared/types';
 import type { CodeFontId } from './fonts';
 
 const STORAGE_KEY = 'pnu-pl-ide:prefs';
@@ -34,8 +33,6 @@ export interface AppPreferences {
   fontSize?: number;
   /** 테마 모드 — 미지정 시 'system' */
   themeMode?: ThemeMode;
-  /** 마지막으로 선택/감지된 인터프리터 */
-  activeInterpreter?: InterpreterId;
   /** 마지막으로 열었던 파일 절대경로 (존재 확인 후 복원) */
   lastFilePath?: string;
 }

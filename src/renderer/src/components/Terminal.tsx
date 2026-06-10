@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Terminal as XtermTerminal, type ITheme } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import '@xterm/xterm/css/xterm.css';
 
 export interface TerminalHandle {
@@ -90,14 +91,29 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       convertEol: true,
       scrollback: 5000,
       theme: xtermThemeFor(themeEffective ?? 'dark'),
+      // Unicode11Addon (term.unicode.activeVersion = '11') 은 proposed API 로 분류되어
+      // 이 플래그가 없으면 throw — 한글/CJK 전각 폭 계산이 필요하므로 활성화.
+      allowProposedApi: true,
     });
 
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.loadAddon(new WebLinksAddon());
+    const unicode11 = new Unicode11Addon();
+    term.loadAddon(unicode11);
 
     term.open(hostRef.current);
-    fit.fit();
+    // xterm 5.5: open() 직후에는 RenderService._renderer.value 가 아직 undefined 라
+    // fit.fit() / unicode.activeVersion 가 dimensions 접근 시 throw 한다.
+    // 다음 frame 까지 deferral 한 뒤, ResizeObserver 콜백이 자동으로 후속 fit 을 처리.
+    requestAnimationFrame(() => {
+      try {
+        term.unicode.activeVersion = '11';
+        fit.fit();
+      } catch {
+        /* 첫 프레임에 renderer 미장착 — ResizeObserver 가 다음 콜백에서 재시도 */
+      }
+    });
 
     /**
      * IME (한글 2벌식 / 일본어 / 중국어 병음 등) 대응.
@@ -122,12 +138,41 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     let lastComposed = '';
     let lastComposedAt = 0;
 
-    const onCompositionStart = (): void => {
+    // ─── [임시 진단] IME 이벤트 추적 — 한글 "제" → "ㅈ" 누락 원인 확인용 ─────
+    // 디버깅 끝나면 onCompositionUpdateDbg 와 console.log 전부 제거할 것.
+    const dbg = (tag: string, ...rest: unknown[]): void => {
+      // eslint-disable-next-line no-console
+      console.log(`[ime:${tag}]`, ...rest);
+    };
+    const onCompositionUpdateDbg = (e: Event): void => {
+      const ce = e as CompositionEvent;
+      dbg(
+        'update',
+        JSON.stringify(ce.data ?? ''),
+        'textarea=',
+        JSON.stringify(helperTextarea?.value ?? ''),
+      );
+    };
+    helperTextarea?.addEventListener('compositionupdate', onCompositionUpdateDbg);
+
+    const onCompositionStart = (e: Event): void => {
+      dbg(
+        'start',
+        JSON.stringify((e as CompositionEvent).data ?? ''),
+        'textarea=',
+        JSON.stringify(helperTextarea?.value ?? ''),
+      );
       composing = true;
     };
     const onCompositionEnd = (e: Event): void => {
       composing = false;
       const composed = (e as CompositionEvent).data;
+      dbg(
+        'end',
+        JSON.stringify(composed ?? ''),
+        'textarea=',
+        JSON.stringify(helperTextarea?.value ?? ''),
+      );
       if (!composed) return;
       lastComposed = composed;
       lastComposedAt = performance.now();
@@ -137,6 +182,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
     helperTextarea?.addEventListener('compositionend', onCompositionEnd);
 
     const onDataDisposable = term.onData((data) => {
+      dbg('data', JSON.stringify(data), 'composing=', composing, 'lastComposed=', JSON.stringify(lastComposed));
       if (composing) return;
       // Xterm 자체의 composed 재 emit 을 dedupe (150ms 창, 1회).
       if (data === lastComposed && performance.now() - lastComposedAt < 150) {
@@ -164,6 +210,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       onDataDisposable.dispose();
       helperTextarea?.removeEventListener('compositionstart', onCompositionStart);
       helperTextarea?.removeEventListener('compositionend', onCompositionEnd);
+      helperTextarea?.removeEventListener('compositionupdate', onCompositionUpdateDbg);
       term.dispose();
       termRef.current = null;
       fitRef.current = null;

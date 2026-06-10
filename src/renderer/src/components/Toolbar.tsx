@@ -1,6 +1,7 @@
 import type { JSX } from 'react';
 import {
   FolderOpen,
+  FolderX,
   Save,
   Play,
   StopCircle,
@@ -15,8 +16,9 @@ interface ToolbarProps {
   isDirty: boolean;
   isRunning: boolean;
   activeInterpreter: InterpreterId | null;
-  onNew: () => void;
-  onOpen: () => void;
+  onNew: () => void | Promise<void>;
+  onOpen: () => void | Promise<void>;
+  onClose: () => void;
   onSave: () => void;
   onRun: () => void;
   onStop: () => void;
@@ -34,6 +36,7 @@ export function Toolbar(props: ToolbarProps): JSX.Element {
     activeInterpreter,
     onNew,
     onOpen,
+    onClose,
     onSave,
     onRun,
     onStop,
@@ -55,6 +58,15 @@ export function Toolbar(props: ToolbarProps): JSX.Element {
         <button className="toolbar-btn" onClick={onOpen} title="파일 열기">
           <FolderOpen size={14} />
           <span>열기</span>
+        </button>
+        <button
+          className="toolbar-btn"
+          onClick={onClose}
+          title="닫기"
+          disabled={!currentFilePath && !isDirty}
+        >
+          <FolderX size={14} />
+          <span>닫기</span>
         </button>
         <button className="toolbar-btn" onClick={onSave} title="저장" disabled={!isDirty}>
           <Save size={14} />

@@ -8,7 +8,8 @@
  *   - `updater.s3BaseUrl` 한 값으로부터 `<base>/<slug>/manifest.json` 을 조립.
  *   - 하위 호환을 위해 legacy `manifestUrl` 필드가 있으면 읽어서 경고는 내되, 새 스킴을 강제.
  */
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { InterpreterId } from '@shared/types';
 import { configJsonPath } from './interpreters/paths';
 
@@ -39,6 +40,8 @@ export interface ConfigUpdaterSection {
 export interface IdeConfigFile {
   binaries?: Partial<Record<InterpreterId, ConfigBinaryEntry>>;
   updater?: ConfigUpdaterSection;
+  /** 마지막으로 열기 다이얼로그에서 선택한 디렉토리. IDE 런타임이 기록, 사용자가 수동 편집 가능. */
+  lastOpenDir?: string;
 }
 
 export type LoadConfigResult =
@@ -58,22 +61,22 @@ export const DEFAULT_S3_BASE_URL =
  */
 export const S3_SLUG: Readonly<Record<InterpreterId, string>> = {
   mowkow: 'mowkow',
-  kobasic: 'kobasic', // dormant — manifest 가 실제로 존재할 때까지 사용되지 않음
+  kobasic: 'kobasic',
   kprolog: 'K-Prolog',
 };
 
 /**
- * PyInstaller `--onefile` 로 산출된 단일 바이너리의 이름.
- * GHA `build.yml` 의 `--name` 플래그와 정확히 일치해야 한다.
+ * 빌드 산출 바이너리 이름. GHA workflow 의 산출물 이름과 정확히 일치해야 한다.
  *
- *   mowkow → `pyinstaller --onefile ... --name mk`
- *   kprolog → `pyinstaller --onefile main.py --name K-Prolog`
+ *   mowkow  → PyInstaller `--name mk`
+ *   kprolog → PyInstaller `--name K-Prolog`
+ *   kobasic → g++ `-o kobasic` (C++ source build)
  */
 export const ENTRYPOINT_NAME: Readonly<
   Record<InterpreterId, { readonly posix: string; readonly win32: string }>
 > = {
   mowkow: { posix: 'mk', win32: 'mk.exe' },
-  kobasic: { posix: 'kobasic', win32: 'kobasic.exe' }, // dormant
+  kobasic: { posix: 'kobasic', win32: 'kobasic.exe' },
   kprolog: { posix: 'K-Prolog', win32: 'K-Prolog.exe' },
 };
 
@@ -88,6 +91,22 @@ export async function loadIdeConfig(): Promise<LoadConfigResult> {
     if (e.code === 'ENOENT') return { ok: true, data: null };
     return { ok: false, message: `config.json 파싱 실패 (${p}): ${e.message ?? String(e)}` };
   }
+}
+
+/**
+ * config.json 의 일부 필드를 덮어쓴다 (나머지 필드는 보존).
+ * 파일이 없으면 새로 생성하고, 있으면 읽어서 patch 를 merge 한 뒤 저장.
+ */
+export async function updateIdeConfig(patch: Partial<IdeConfigFile>): Promise<void> {
+  const p = configJsonPath();
+  let existing: IdeConfigFile = {};
+  try {
+    existing = JSON.parse(await readFile(p, 'utf-8')) as IdeConfigFile;
+  } catch {
+    /* 파일 없음 — 신규 생성 */
+  }
+  await mkdir(dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify({ ...existing, ...patch }, null, 2), 'utf-8');
 }
 
 /**

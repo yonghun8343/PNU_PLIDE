@@ -31,10 +31,10 @@ import { loadIdeConfig, ENTRYPOINT_NAME, type ConfigBinaryEntry } from '../confi
 // ---------------------------------------------------------------------------
 //
 // Updater 와의 단일 진실 공급원 유지를 위해 `ENTRYPOINT_NAME` 을 재사용한다.
-// GHA `--name` 플래그와 정확히 일치:
+// GHA 산출물명과 정확히 일치:
 //   mowkow  → mk  / mk.exe
 //   kprolog → K-Prolog / K-Prolog.exe   (주의: PascalCase + hyphen)
-//   kobasic → kobasic / kobasic.exe     (dormant)
+//   kobasic → kobasic / kobasic.exe
 
 function defaultBinaryFullPath(id: InterpreterId): string {
   const names = ENTRYPOINT_NAME[id];

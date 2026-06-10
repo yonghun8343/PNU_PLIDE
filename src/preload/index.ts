@@ -34,8 +34,13 @@ const api = {
   getVersion: (): Promise<AppVersionInfo> => ipcRenderer.invoke(IPC.APP_GET_VERSION),
   openExternal: (url: string): Promise<void> => ipcRenderer.invoke(IPC.APP_OPEN_EXTERNAL, url),
 
+  dialog: {
+    confirmClose: (): Promise<number> => ipcRenderer.invoke(IPC.DIALOG_CLOSE_FILE),
+  },
+
   fs: {
-    openDialog: (): Promise<string | null> => ipcRenderer.invoke(IPC.FS_OPEN_DIALOG),
+    openDialog: (interpreterId?: InterpreterId | null): Promise<string | null> =>
+      ipcRenderer.invoke(IPC.FS_OPEN_DIALOG, interpreterId ?? null),
     saveDialog: (defaultPath?: string, defaultExt?: string): Promise<string | null> =>
       ipcRenderer.invoke(IPC.FS_SAVE_DIALOG, defaultPath, defaultExt),
     readFile: (filePath: string): Promise<{ filePath: string; content: string }> =>

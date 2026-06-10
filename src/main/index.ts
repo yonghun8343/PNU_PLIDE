@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, nativeTheme } from 'electron';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { IPC } from '@shared/ipc-channels';
@@ -13,6 +13,8 @@ import { applyUpdate, checkForUpdates, cleanupStaleArtifacts } from './updater';
 import type { UpdateProgress } from '@shared/types';
 import { buildAppMenu } from './menu';
 import { startSysMetricsSampler, stopSysMetricsSampler } from './sys-metrics';
+import { loadIdeConfig, updateIdeConfig } from './config';
+import { attachRendererLogger } from './dev-logger';
 
 /**
  * 초기 BrowserWindow backgroundColor 결정.
@@ -26,6 +28,9 @@ import { startSysMetricsSampler, stopSysMetricsSampler } from './sys-metrics';
  * 따라서 시스템 기본값을 따르고, 렌더러 첫 tick 직후 `theme:set` IPC 로
  * 정확한 값으로 수렴시킨다.
  */
+/** 마지막으로 열기 다이얼로그에서 선택한 디렉토리. config.json 에서 로드, 변경 시 즉시 저장. */
+let lastOpenDir: string | undefined;
+
 function initialBackgroundColor(): string {
   return nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#ffffff';
 }
@@ -69,6 +74,9 @@ function createWindow(): BrowserWindow {
   } else {
     void win.loadFile(join(__dirname, '../renderer/index.html'));
   }
+
+  // 개발 모드: renderer 콘솔을 ~/.pnu-pl-ide/logs/dev-*.log 로 미러링.
+  if (is.dev) attachRendererLogger(win);
 
   return win;
 }
@@ -119,21 +127,60 @@ function registerIpcHandlers(): void {
     },
   );
 
-  // 파일 열기 dialog
-  ipcMain.handle(IPC.FS_OPEN_DIALOG, async (e) => {
+  // 닫기 dirty-check 다이얼로그 — 0=저장, 1=저장 안 함, 2=취소
+  ipcMain.handle(IPC.DIALOG_CLOSE_FILE, async (e) => {
     const owner = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+    const result = await dialog.showMessageBox(owner!, {
+      type: 'warning',
+      message: '저장하지 않은 변경사항이 있습니다.',
+      detail: '닫기 전에 변경사항을 저장하시겠습니까?',
+      buttons: ['저장', '저장 안 함', '취소'],
+      defaultId: 0,
+      cancelId: 2,
+    });
+    return result.response;
+  });
+
+  // 파일 열기 dialog — 필터는 활성 인터프리터에 따라 달라진다.
+  //   - 선택된 인터프리터가 있으면 해당 확장자만 (예: kobasic → .kob)
+  //   - 선택 없음이면 지원 3종 통합 + 각 언어 개별 필터
+  // 어느 경우든 맨 끝에 "모든 파일" 옵션을 둔다.
+  ipcMain.handle(IPC.FS_OPEN_DIALOG, async (e, interpreterId: InterpreterId | null) => {
+    const owner = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+
+    const stripDot = (x: string): string => x.replace(/^\./, '');
+    const active = interpreterId
+      ? INTERPRETERS.find((i) => i.id === interpreterId)
+      : undefined;
+
+    const filters: Electron.FileFilter[] = active
+      ? [
+          { name: active.displayName, extensions: active.fileExtensions.map(stripDot) },
+          { name: '모든 파일', extensions: ['*'] },
+        ]
+      : [
+          {
+            name: '지원 언어',
+            extensions: INTERPRETERS.flatMap((i) => i.fileExtensions.map(stripDot)),
+          },
+          ...INTERPRETERS.map((i) => ({
+            name: i.displayName,
+            extensions: i.fileExtensions.map(stripDot),
+          })),
+          { name: '모든 파일', extensions: ['*'] },
+        ];
+
     const result = await dialog.showOpenDialog(owner!, {
       title: '파일 열기',
+      defaultPath: lastOpenDir,
       properties: ['openFile'],
-      filters: [
-        { name: 'Mowkow', extensions: ['mk'] },
-        { name: 'Kobasic', extensions: ['kob'] },
-        { name: 'K-Prolog', extensions: ['kpl'] },
-        { name: '모든 파일', extensions: ['*'] },
-      ],
+      filters,
     });
     if (result.canceled || result.filePaths.length === 0) return null;
-    return result.filePaths[0];
+    const chosen = result.filePaths[0];
+    lastOpenDir = dirname(chosen);
+    void updateIdeConfig({ lastOpenDir: lastOpenDir });
+    return chosen;
   });
 
   // 파일 저장 dialog
@@ -149,7 +196,17 @@ function registerIpcHandlers(): void {
           : [{ name: '모든 파일', extensions: ['*'] }],
       });
       if (result.canceled || !result.filePath) return null;
-      return result.filePath;
+
+      let fp = result.filePath;
+      if (defaultExt) {
+        const ext = defaultExt.startsWith('.') ? defaultExt : `.${defaultExt}`;
+        // macOS의 showSaveDialog는 filters에 지정한 확장자를 자동으로 붙이므로
+        // 사용자가 이미 확장자를 입력한 경우 중복(예: test.mk.mk)이 발생한다.
+        if (fp.endsWith(ext + ext)) {
+          fp = fp.slice(0, -ext.length);
+        }
+      }
+      return fp;
     },
   );
 
@@ -251,6 +308,9 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(win);
   });
 
+  void loadIdeConfig().then((result) => {
+    if (result.ok && result.data?.lastOpenDir) lastOpenDir = result.data.lastOpenDir;
+  });
   registerIpcHandlers();
   // 애플리케이션 메뉴 설정 — `새 창` 에서 createWindow() 를 호출하기 위해 콜백 주입.
   buildAppMenu(() => {

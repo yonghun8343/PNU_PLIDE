@@ -27,6 +27,32 @@ import {
 
 const INITIAL_SAMPLE = '';
 
+/**
+ * 터미널 셀 폭 판별 — CJK / Hangul / 전각 기호 등은 2셀, 그 외 1셀.
+ * 백스페이스로 지울 셀 수를 결정하기 위해 사용. Unicode 11 EastAsianWidth
+ * (Wide=W / Fullwidth=F) 의 주요 블록만 커버 (보조 평면 surrogate pair 포함).
+ */
+function isWideChar(ch: string): boolean {
+  if (!ch) return false;
+  const cp = ch.codePointAt(0);
+  if (cp === undefined) return false;
+  return (
+    (cp >= 0x1100 && cp <= 0x115f) || // Hangul Jamo
+    (cp >= 0x2e80 && cp <= 0x303e) || // CJK Radicals / Kangxi / 일부 기호
+    (cp >= 0x3041 && cp <= 0x33ff) || // Hiragana / Katakana / Bopomofo / Hangul Compat Jamo
+    (cp >= 0x3400 && cp <= 0x4dbf) || // CJK Unified Ideographs Ext A
+    (cp >= 0x4e00 && cp <= 0x9fff) || // CJK Unified Ideographs
+    (cp >= 0xa000 && cp <= 0xa4cf) || // Yi
+    (cp >= 0xac00 && cp <= 0xd7a3) || // Hangul Syllables
+    (cp >= 0xf900 && cp <= 0xfaff) || // CJK Compatibility Ideographs
+    (cp >= 0xfe30 && cp <= 0xfe4f) || // CJK Compatibility Forms
+    (cp >= 0xff00 && cp <= 0xff60) || // Fullwidth Forms
+    (cp >= 0xffe0 && cp <= 0xffe6) || // Fullwidth Signs
+    (cp >= 0x20000 && cp <= 0x2fffd) || // CJK Ext B–F (보조 평면)
+    (cp >= 0x30000 && cp <= 0x3fffd) // CJK Ext G+
+  );
+}
+
 function App(): JSX.Element {
   // Phase 8: persistence — 기동 시 1회 로드
   const initialPrefs = useMemo(() => loadPrefs(), []);
@@ -35,9 +61,8 @@ function App(): JSX.Element {
   const [filePath, setFilePath] = useState<string | null>(null);
   const [content, setContent] = useState<string>(INITIAL_SAMPLE);
   const [savedContent, setSavedContent] = useState<string>(INITIAL_SAMPLE);
-  const [activeInterpreter, setActiveInterpreterState] = useState<InterpreterId | null>(
-    initialPrefs.activeInterpreter ?? null,
-  );
+  // 기동 시 항상 미선택. 파일을 열면 detectInterpreter 로 확장자 기반 자동 선택됨.
+  const [activeInterpreter, setActiveInterpreterState] = useState<InterpreterId | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [codeFont, setCodeFont] = useState<CodeFontId>(() => {
     const f = initialPrefs.codeFont;
@@ -67,12 +92,11 @@ function App(): JSX.Element {
   const [sysMetrics, setSysMetrics] = useState<SysMetrics | null>(null);
 
   /**
-   * setActiveInterpreter 래퍼 — state 변경 + preferences 저장.
-   * Toolbar / Sidebar 의 "선택" 이벤트를 모두 이 함수로 받아 persistence 를 중앙화.
+   * setActiveInterpreter — state 만 갱신. persistence 는 의도적으로 하지 않아
+   * 기동 시 항상 미선택 상태에서 시작한다. 파일 오픈/드롭 시 확장자 기반 자동 감지.
    */
   const setActiveInterpreter = useCallback((id: InterpreterId | null) => {
     setActiveInterpreterState(id);
-    if (id) updatePrefs({ activeInterpreter: id });
   }, []);
 
   const termRef = useRef<TerminalHandle>(null);
@@ -80,6 +104,12 @@ function App(): JSX.Element {
   const sessionIdRef = useRef<SessionId | null>(null);
   /** line-buffered input 누적 버퍼 (세션이 running 인 동안만 사용) */
   const inputBufferRef = useRef<string>('');
+  /** 입력 히스토리 (Enter 로 전송된 라인). 세션 간 유지. */
+  const historyRef = useRef<string[]>([]);
+  /** 현재 탐색 중인 히스토리 인덱스. -1 = 탐색 안 함 */
+  const historyIndexRef = useRef<number>(-1);
+  /** 히스토리 탐색 전 타이핑 중이던 미완성 입력 임시 저장 */
+  const historyDraftRef = useRef<string>('');
 
   const isDirty = content !== savedContent;
   const language = useMemo(() => monacoLanguageFor(activeInterpreter), [activeInterpreter]);
@@ -201,6 +231,8 @@ function App(): JSX.Element {
       t?.writeln(`\x1b[90m[session] 종료 (${tag})\x1b[0m`);
       sessionIdRef.current = null;
       inputBufferRef.current = '';
+      historyIndexRef.current = -1;
+      historyDraftRef.current = '';
       setIsRunning(false);
     });
     return () => {
@@ -210,24 +242,21 @@ function App(): JSX.Element {
     };
   }, []);
 
-  const onNew = useCallback(() => {
+  const resetToEmpty = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (sid) void window.api.interp.kill(sid);
+    sessionIdRef.current = null;
+    inputBufferRef.current = '';
+    historyRef.current = [];
+    historyIndexRef.current = -1;
+    historyDraftRef.current = '';
+    setIsRunning(false);
     setFilePath(null);
     setContent('');
     setSavedContent('');
+    setActiveInterpreter(null);
+    termRef.current?.clear();
     updatePrefs({ lastFilePath: undefined });
-  }, []);
-
-  const onOpen = useCallback(async () => {
-    const picked = await window.api.fs.openDialog();
-    if (!picked) return;
-    const { filePath: p, content: c } = await window.api.fs.readFile(picked);
-    setFilePath(p);
-    setContent(c);
-    setSavedContent(c);
-    const detected = detectInterpreter(p);
-    if (detected) setActiveInterpreter(detected);
-    updatePrefs({ lastFilePath: p });
-    termRef.current?.writeln(`\x1b[90m[file]\x1b[0m loaded ${p}`);
   }, [setActiveInterpreter]);
 
   const onSave = useCallback(async (): Promise<string | null> => {
@@ -246,6 +275,98 @@ function App(): JSX.Element {
     termRef.current?.writeln(`\x1b[90m[file]\x1b[0m saved ${target}`);
     return target;
   }, [filePath, content, activeInterpreter]);
+
+  const onNew = useCallback(async () => {
+    if (isDirty) {
+      const response = await window.api.dialog.confirmClose();
+      if (response === 2) return;
+      if (response === 0) {
+        const saved = await onSave();
+        if (!saved) return;
+      }
+    }
+    resetToEmpty();
+  }, [isDirty, onSave, resetToEmpty]);
+
+  const onOpen = useCallback(async () => {
+    if (isDirty) {
+      const response = await window.api.dialog.confirmClose();
+      if (response === 2) return;
+      if (response === 0) {
+        const saved = await onSave();
+        if (!saved) return;
+      }
+    }
+    const picked = await window.api.fs.openDialog(activeInterpreter);
+    if (!picked) return;
+    // 실행 중인 세션 종료
+    const sid = sessionIdRef.current;
+    if (sid) void window.api.interp.kill(sid);
+    sessionIdRef.current = null;
+    inputBufferRef.current = '';
+    setIsRunning(false);
+    const { filePath: p, content: c } = await window.api.fs.readFile(picked);
+    setFilePath(p);
+    setContent(c);
+    setSavedContent(c);
+    setActiveInterpreter(detectInterpreter(p));
+    updatePrefs({ lastFilePath: p });
+    termRef.current?.writeln(`\x1b[90m[file]\x1b[0m loaded ${p}`);
+  }, [isDirty, onSave, setActiveInterpreter, activeInterpreter]);
+
+  const onClose = useCallback(async () => {
+    if (isDirty) {
+      const response = await window.api.dialog.confirmClose();
+      if (response === 2) return; // 취소
+      if (response === 0) {
+        const saved = await onSave();
+        if (!saved) return; // 저장 다이얼로그 취소
+      }
+      // response === 1 → 저장 안 함, 바로 닫기
+    }
+    resetToEmpty();
+  }, [isDirty, onSave, resetToEmpty]);
+
+  /**
+   * Toolbar 드롭다운 전용 핸들러.
+   *
+   * 같은 언어 재선택은 no-op. dirty 라면 confirmClose 로 사용자 의사 확인.
+   * 통과 시 실행 세션 종료 / 파일 컨텍스트 / 에디터 내용을 모두 비우고,
+   * 새 언어가 KoBasic 이면 `10 ` 템플릿을 채워 즉시 입력 가능한 상태로 만든다.
+   *
+   * 파일 열기/드롭은 `setActiveInterpreter(detectInterpreter(p))` 를 그대로 사용 —
+   * 파일 내용이 우선이므로 clear/템플릿 로직을 우회한다.
+   */
+  const selectInterpreterFromMenu = useCallback(
+    async (id: InterpreterId) => {
+      if (id === activeInterpreter) return;
+
+      if (isDirty) {
+        const response = await window.api.dialog.confirmClose();
+        if (response === 2) return; // 취소 — 언어 변경도 abort
+        if (response === 0) {
+          const saved = await onSave();
+          if (!saved) return; // 저장 다이얼로그 취소
+        }
+        // response === 1 → 저장 안 함, 진행
+      }
+
+      const sid = sessionIdRef.current;
+      if (sid) void window.api.interp.kill(sid);
+      sessionIdRef.current = null;
+      inputBufferRef.current = '';
+      setIsRunning(false);
+
+      setFilePath(null);
+      updatePrefs({ lastFilePath: undefined });
+
+      const template = id === 'kobasic' ? '10 ' : '';
+      setContent(template);
+      setSavedContent(template);
+      setActiveInterpreter(id);
+    },
+    [activeInterpreter, isDirty, onSave, setActiveInterpreter],
+  );
 
   const onRun = useCallback(async () => {
     if (!activeInterpreter) return;
@@ -300,7 +421,13 @@ function App(): JSX.Element {
     return res;
   }, []);
 
+  // dev 모드의 React.StrictMode 는 useEffect 를 두 번 실행해 silent check 의 async
+  // 호출이 두 번 발사되고, 두 응답이 동일 터미널에 같은 안내를 중복 출력한다.
+  // module-level ref 로 첫 호출만 통과시키되, 후속 mount(HMR/재진입) 에도 idempotent.
+  const startupUpdateChecked = useRef(false);
   useEffect(() => {
+    if (startupUpdateChecked.current) return;
+    startupUpdateChecked.current = true;
     // 기동 시 silent check. s3BaseUrl 미설정이어도 DEFAULT_S3_BASE_URL 로 fallback.
     void (async () => {
       const res = await window.api.updater.check();
@@ -343,7 +470,7 @@ function App(): JSX.Element {
     menuActionsRef.current = { onNew, onOpen, onSave, onRun };
   }, [onNew, onOpen, onSave, onRun]);
   useEffect(() => {
-    const offNew = window.api.menu.onNewFile(() => menuActionsRef.current.onNew());
+    const offNew = window.api.menu.onNewFile(() => void menuActionsRef.current.onNew());
     const offOpen = window.api.menu.onOpenFile(() => void menuActionsRef.current.onOpen());
     const offSave = window.api.menu.onSaveFile(() => void menuActionsRef.current.onSave());
     const offRun = window.api.menu.onRun(() => void menuActionsRef.current.onRun());
@@ -371,16 +498,29 @@ function App(): JSX.Element {
     async (e: DragEvent<HTMLDivElement>) => {
       if (!e.dataTransfer.files || e.dataTransfer.files.length === 0) return;
       e.preventDefault();
+      if (isDirty) {
+        const response = await window.api.dialog.confirmClose();
+        if (response === 2) return;
+        if (response === 0) {
+          const saved = await onSave();
+          if (!saved) return;
+        }
+      }
       const file = e.dataTransfer.files[0];
       const picked = window.api.fs.getPathForFile(file);
       if (!picked) return;
+      // 실행 중인 세션 종료
+      const sid = sessionIdRef.current;
+      if (sid) void window.api.interp.kill(sid);
+      sessionIdRef.current = null;
+      inputBufferRef.current = '';
+      setIsRunning(false);
       try {
         const { filePath: p, content: c } = await window.api.fs.readFile(picked);
         setFilePath(p);
         setContent(c);
         setSavedContent(c);
-        const detected = detectInterpreter(p);
-        if (detected) setActiveInterpreter(detected);
+        setActiveInterpreter(detectInterpreter(p));
         updatePrefs({ lastFilePath: p });
         termRef.current?.writeln(`\x1b[90m[file]\x1b[0m dropped ${p}`);
       } catch (err) {
@@ -388,22 +528,15 @@ function App(): JSX.Element {
         termRef.current?.writeln(`\x1b[31m[drop failed]\x1b[0m ${msg}`);
       }
     },
-    [setActiveInterpreter],
+    [isDirty, onSave, setActiveInterpreter],
   );
 
-  /**
-   * Xterm 입력 라인 버퍼링:
-   *   - pipe 모드 (no PTY) 이므로 child 가 echo 를 주지 않는다 → 로컬 에코 필요.
-   *   - 인터프리터가 line-buffered readline 을 쓰는 경우가 많아, Enter 까지 대기했다가 한 줄씩 stdin 에 write.
-   *   - Ctrl+C → kill, Backspace → 버퍼/화면 동기화, IME 포함 멀티바이트 문자열은 그대로 pass.
-   */
   const onTerminalInput = useCallback((data: string) => {
     const t = termRef.current;
     if (!t) return;
 
     const sid = sessionIdRef.current;
     if (!sid) {
-      // 세션 없음 — 기존 로컬 에코 fallback
       t.write(data);
       return;
     }
@@ -412,34 +545,86 @@ function App(): JSX.Element {
     if (data === '\x03') {
       t.writeln('^C');
       inputBufferRef.current = '';
+      historyIndexRef.current = -1;
+      historyDraftRef.current = '';
       void window.api.interp.kill(sid);
       return;
     }
-    // Ctrl+D — 현 단계에서는 세션 종료 신호로 사용
+    // Ctrl+D
     if (data === '\x04') {
       t.writeln('^D');
       inputBufferRef.current = '';
+      historyIndexRef.current = -1;
+      historyDraftRef.current = '';
       void window.api.interp.kill(sid);
       return;
     }
     // Backspace (DEL 0x7f 또는 BS 0x08)
+    // 한글 등 CJK 전각 문자는 터미널에서 2셀을 차지하므로 '\b \b' (1셀) 만 보내면
+    // 시각적으로 절반만 지워진다. Array.from 으로 코드포인트 단위 분리 후 마지막
+    // 문자의 폭에 맞춰 '\b\b  \b\b' (2셀) 또는 '\b \b' (1셀) 를 송신.
     if (data === '\x7f' || data === '\b') {
-      if (inputBufferRef.current.length > 0) {
-        inputBufferRef.current = inputBufferRef.current.slice(0, -1);
-        t.write('\b \b');
+      const chars = Array.from(inputBufferRef.current);
+      const last = chars.pop();
+      if (last !== undefined) {
+        inputBufferRef.current = chars.join('');
+        t.write(isWideChar(last) ? '\b\b  \b\b' : '\b \b');
+      }
+      return;
+    }
+    // 위 화살표 — 이전 명령어
+    if (data === '\x1b[A') {
+      const history = historyRef.current;
+      if (history.length === 0) return;
+      if (historyIndexRef.current === -1) {
+        historyDraftRef.current = inputBufferRef.current;
+        historyIndexRef.current = history.length - 1;
+      } else if (historyIndexRef.current > 0) {
+        historyIndexRef.current -= 1;
+      }
+      const entry = history[historyIndexRef.current];
+      t.write('\r\x1b[K' + entry);
+      inputBufferRef.current = entry;
+      return;
+    }
+    // 아래 화살표 — 다음 명령어 또는 draft 복원
+    if (data === '\x1b[B') {
+      if (historyIndexRef.current === -1) return;
+      const history = historyRef.current;
+      if (historyIndexRef.current < history.length - 1) {
+        historyIndexRef.current += 1;
+        const entry = history[historyIndexRef.current];
+        t.write('\r\x1b[K' + entry);
+        inputBufferRef.current = entry;
+      } else {
+        const draft = historyDraftRef.current;
+        historyIndexRef.current = -1;
+        historyDraftRef.current = '';
+        t.write('\r\x1b[K' + draft);
+        inputBufferRef.current = draft;
       }
       return;
     }
     // Enter
     if (data === '\r' || data === '\n' || data === '\r\n') {
-      const line = inputBufferRef.current + '\n';
+      const line = inputBufferRef.current;
+      if (line.trim()) {
+        historyRef.current.push(line);
+      }
+      historyIndexRef.current = -1;
+      historyDraftRef.current = '';
       inputBufferRef.current = '';
       t.write('\r\n');
-      void window.api.interp.writeStdin(sid, line);
+      void window.api.interp.writeStdin(sid, line + '\n');
       return;
     }
-    // 그 외: printable / multibyte (IME 포함). 제어 문자는 무시.
+    // 그 외 printable / multibyte (IME 포함). 제어 문자는 무시.
     if (data.length > 0 && data.charCodeAt(0) >= 0x20) {
+      // 히스토리 탐색 중 새 문자 입력 시 탐색 해제
+      if (historyIndexRef.current !== -1) {
+        historyIndexRef.current = -1;
+        historyDraftRef.current = '';
+      }
       inputBufferRef.current += data;
       t.write(data);
     }
@@ -454,13 +639,14 @@ function App(): JSX.Element {
         activeInterpreter={activeInterpreter}
         onNew={onNew}
         onOpen={onOpen}
+        onClose={() => void onClose()}
         onSave={() => void onSave()}
         onRun={() => void onRun()}
         onStop={() => void onStop()}
         onOpenSettings={() => setSettingsOpen(true)}
         onCheckUpdates={onCheckUpdates}
         updateBadge={updateAvailableCount}
-        onSelectInterpreter={setActiveInterpreter}
+        onSelectInterpreter={(id) => void selectInterpreterFromMenu(id)}
       />
 
       <UpdateDialog

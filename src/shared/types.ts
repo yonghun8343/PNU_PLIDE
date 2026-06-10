@@ -6,15 +6,9 @@
  *
  * Phase 4-R 리비전:
  *   - 자체 HTTPS 호스팅(centralized manifest) → AWS S3 per-interpreter manifest 로 교체.
- *   - kobasic 은 windows.h 호환 문제가 해결될 때까지 dormant.
- *     타입·adapter·monarch 파일은 보존하되 `INTERPRETERS` 배열과 S3 manifest 에서 제외.
  */
 
-/**
- * 현재 등록된 인터프리터 ID.
- * - `kobasic` 은 windows.h 호환 문제가 해결될 때까지 dormant (S3 manifest 미제공,
- *   `INTERPRETERS` 배열에서도 제외). adapter/monarch 모듈은 `*.ts` 자체로 보존.
- */
+/** 현재 등록된 인터프리터 ID. */
 export type InterpreterId = 'mowkow' | 'kobasic' | 'kprolog';
 
 export interface InterpreterMeta {
@@ -25,16 +19,20 @@ export interface InterpreterMeta {
   readonly needsPty: boolean;
 }
 
-/**
- * UI/Updater 에 노출되는 "활성" 인터프리터 목록.
- * kobasic 은 의도적으로 제외되어 있으며, 재활성화 시 이 배열에만 추가하면 된다.
- */
+/** UI/Updater 에 노출되는 활성 인터프리터 목록. */
 export const INTERPRETERS: readonly InterpreterMeta[] = [
   {
     id: 'mowkow',
     displayName: '머꼬 (Mowkow)',
     fileExtensions: ['.mk'],
     replExitHint: '빈 줄 입력',
+    needsPty: false,
+  },
+  {
+    id: 'kobasic',
+    displayName: '코베이직 (KoBASIC)',
+    fileExtensions: ['.kob'],
+    replExitHint: "'끝' 입력",
     needsPty: false,
   },
   {

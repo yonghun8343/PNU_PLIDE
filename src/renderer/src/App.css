@@ -112,6 +112,11 @@ body,
 .toolbar-btn-accent:hover:not(:disabled) {
   background: #1177bb;
 }
+.toolbar-btn-accent:disabled {
+  background: var(--bg-hover);
+  color: var(--fg-muted);
+  cursor: not-allowed;
+}
 .toolbar-btn-danger {
   background: #3a1f22;
   color: var(--danger);

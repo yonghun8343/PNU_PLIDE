@@ -13,6 +13,9 @@ export const IPC = {
   APP_GET_VERSION: 'app:get-version',
   APP_OPEN_EXTERNAL: 'app:open-external',
 
+  // 다이얼로그
+  DIALOG_CLOSE_FILE: 'dialog:close-file', // dirty check → 0=저장, 1=저장 안 함, 2=취소
+
   // 파일 IO (Phase 2)
   FS_OPEN_DIALOG: 'fs:open-dialog',
   FS_SAVE_DIALOG: 'fs:save-dialog',

@@ -152,10 +152,32 @@ export const mowkowLangConfig: monaco.languages.LanguageConfiguration = {
     { open: '"', close: '"' },
   ],
   wordPattern: /[^\s()[\];"'`,.]+/,
+  indentationRules: {
+    increaseIndentPattern: /[([]\s*$/,
+    decreaseIndentPattern: /^\s*[)\]]/,
+  },
   // S-expr 은 들여쓰기 의존이 아니지만 입력 편의상 여는 괄호 뒤 자동 들여쓰기.
   onEnterRules: [
+    // 커서가 ( … ) 사이에 있을 때 → 다음 줄 들여쓰기 + ) 는 내어쓰기
     {
       beforeText: /\([^)]*$/,
+      afterText: /^\s*\)/,
+      action: { indentAction: monaco.languages.IndentAction.IndentOutdent },
+    },
+    // 커서가 [ … ] 사이에 있을 때 → 다음 줄 들여쓰기 + ] 는 내어쓰기
+    {
+      beforeText: /\[[^\]]*$/,
+      afterText: /^\s*\]/,
+      action: { indentAction: monaco.languages.IndentAction.IndentOutdent },
+    },
+    // 줄 끝에 닫히지 않은 ( → 다음 줄 들여쓰기
+    {
+      beforeText: /\([^)]*$/,
+      action: { indentAction: monaco.languages.IndentAction.Indent },
+    },
+    // 줄 끝에 닫히지 않은 [ → 다음 줄 들여쓰기
+    {
+      beforeText: /\[[^\]]*$/,
       action: { indentAction: monaco.languages.IndentAction.Indent },
     },
   ],
